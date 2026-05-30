@@ -49,5 +49,6 @@ redisdata/
 *.key
 *.cert
 
-# Claude Code internal state
-.claude/
+# Claude Code memory (auto-generated, not for sharing)
+.claude/memory/
+.claude/MEMORY.md
