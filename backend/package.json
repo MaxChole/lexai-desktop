@@ -1,0 +1,43 @@
+{
+  "name": "lexai-backend",
+  "version": "0.1.0",
+  "description": "LexAI Desktop backend — Fastify API service",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "migrate": "node-pg-migrate up",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "lexai",
+    "legal-ai",
+    "fastify"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@fastify/cors": "^9.0.1",
+    "@fastify/env": "^4.4.0",
+    "@fastify/jwt": "^8.0.1",
+    "@supabase/supabase-js": "^2.49.0",
+    "@types/node-cron": "^3.0.11",
+    "dotenv": "^16.4.7",
+    "fastify": "^4.28.1",
+    "node-cron": "^4.2.1",
+    "node-pg-migrate": "^7.8.0",
+    "pg": "^8.13.1",
+    "redis": "^4.7.0",
+    "stripe": "^17.5.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

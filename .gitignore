@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Electron
+frontend/release/
+
+# Testing
+coverage/
+
+# Docker data (local volumes are managed by docker)
+pgdata/
+redisdata/
+
+# Cache
+.cache/
+.parcel-cache/
+.vite/
+
+# Misc
+*.pem
+*.key
+*.cert
+
+# Claude Code internal state
+.claude/

@@ -1,0 +1,9 @@
+[submodule "references/claude-for-legal"]
+	path = references/claude-for-legal
+	url = https://github.com/anthropics/claude-for-legal.git
+[submodule "references/claude-for-legal-ZH"]
+	path = references/claude-for-legal-ZH
+	url = https://github.com/CSlawyer1985/claude-for-legal-ZH
+[submodule "references/claw-code"]
+	path = references/claw-code
+	url = https://github.com/ultraworkers/claw-code.git
