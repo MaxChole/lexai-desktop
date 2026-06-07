@@ -91,11 +91,26 @@ export class LocalSkillEngine {
       const jurisdiction = jurisdictionFromRepo(repoName, plugin, frontmatter).toLowerCase();
       const candidateId = `${jurisdiction}:${plugin}:${resolvedName}`;
       if (candidateId === skillId) {
-        this.promptCache.set(skillId, body);
-        return body;
+        const practiceProfile = await this.loadPracticeProfile(repoRoot, plugin);
+        const prompt = practiceProfile
+          ? `${body}\n\n---\n\n# Practice Profile\n\n${practiceProfile}`
+          : body;
+        this.promptCache.set(skillId, prompt);
+        return prompt;
       }
     }
 
     throw new Error(`Local skill prompt not found: ${skillId}`);
+  }
+
+  private async loadPracticeProfile(repoRoot: string, plugin: string): Promise<string | undefined> {
+    const practiceProfilePath = path.join(repoRoot, plugin, 'CLAUDE.md');
+
+    try {
+      const raw = await fs.readFile(practiceProfilePath, 'utf-8');
+      return raw.trim();
+    } catch {
+      return undefined;
+    }
   }
 }
