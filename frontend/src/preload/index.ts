@@ -16,8 +16,13 @@ contextBridge.exposeInMainWorld('lexai', {
     get: (plugin: string) => ipcRenderer.invoke('practice-profile:get', plugin),
     set: (plugin: string, content: string) => ipcRenderer.invoke('practice-profile:set', { plugin, content }),
   },
+  localChat: {
+    list: () => ipcRenderer.invoke('local-chat:list'),
+    get: (conversationId: string) => ipcRenderer.invoke('local-chat:get', conversationId),
+    delete: (conversationId: string) => ipcRenderer.invoke('local-chat:delete', conversationId),
+  },
   chat: {
-    send: (message: string, skillId?: string) => ipcRenderer.invoke('chat:send', { message, skillId }),
+    send: (message: string, skillId?: string, conversationId?: string) => ipcRenderer.invoke('chat:send', { message, skillId, conversationId }),
   },
 
   // Platform info

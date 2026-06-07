@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
-import type { DesktopChatResponse, LocalInferenceStatus } from './types';
+import type {
+  DesktopChatResponse,
+  LocalConversationRecord,
+  LocalConversationSummary,
+  LocalInferenceStatus,
+} from './types';
 
 interface SkillItem {
   id: string;
@@ -57,6 +62,8 @@ function App() {
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
+  const [localConversations, setLocalConversations] = useState<LocalConversationSummary[]>([]);
+  const [activeLocalConversationId, setActiveLocalConversationId] = useState<string | null>(null);
   const [practiceProfileDraft, setPracticeProfileDraft] = useState('');
   const [practiceProfileLoading, setPracticeProfileLoading] = useState(false);
   const [practiceProfileSaving, setPracticeProfileSaving] = useState(false);
@@ -82,6 +89,23 @@ function App() {
     } finally {
       setLocalStatusLoading(false);
     }
+  }
+
+  async function loadLocalConversations() {
+    try {
+      const conversations = await window.lexai.localChat.list();
+      setLocalConversations(conversations);
+    } catch (error) {
+      console.error('Local conversation list error:', error);
+    }
+  }
+
+  async function openLocalConversation(conversationId: string) {
+    const conversation = await window.lexai.localChat.get(conversationId);
+    if (!conversation) return;
+
+    setActiveLocalConversationId(conversation.id);
+    setConversation(conversation.messages);
   }
 
   // Load skills and agents when jurisdiction changes
@@ -123,6 +147,7 @@ function App() {
 
   useEffect(() => {
     void loadLocalInferenceStatus();
+    void loadLocalConversations();
     void window.lexai.runtimeMode.get().then((mode) => {
       setRuntimeMode(mode);
     });
@@ -199,26 +224,34 @@ function App() {
     if (!trimmed || sending) return;
 
     setSending(true);
-    setConversation((current) => [
-      ...current,
-      {
-        role: 'user',
-        content: trimmed,
-        meta: selectedSkill ? `skill · ${selectedSkill.id}` : undefined,
-      },
-    ]);
-    setInputText('');
-
-    try {
-      const result: DesktopChatResponse = await window.lexai.chat.send(trimmed, selectedSkill?.id);
+    if (runtimeMode === 'cloud') {
       setConversation((current) => [
         ...current,
         {
-          role: 'assistant',
-          content: result.content,
-          meta: `${result.provider} · ${result.model}`,
+          role: 'user',
+          content: trimmed,
+          meta: selectedSkill ? `skill · ${selectedSkill.id}` : undefined,
         },
       ]);
+    }
+    setInputText('');
+
+    try {
+      const result: DesktopChatResponse = await window.lexai.chat.send(trimmed, selectedSkill?.id, activeLocalConversationId ?? undefined);
+      if (runtimeMode === 'local' && result.conversationId) {
+        setActiveLocalConversationId(result.conversationId);
+        await openLocalConversation(result.conversationId);
+        await loadLocalConversations();
+      } else {
+        setConversation((current) => [
+          ...current,
+          {
+            role: 'assistant',
+            content: result.content,
+            meta: `${result.provider} · ${result.model}`,
+          },
+        ]);
+      }
     } catch (error) {
       setConversation((current) => [
         ...current,
@@ -231,6 +264,30 @@ function App() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function handleDeleteLocalConversation(conversationId: string) {
+    await window.lexai.localChat.delete(conversationId);
+    if (activeLocalConversationId === conversationId) {
+      setActiveLocalConversationId(null);
+      setConversation([]);
+    }
+    await loadLocalConversations();
+  }
+
+  function handleNewConversation() {
+    setConversation([]);
+    setActiveLocalConversationId(null);
+  }
+
+  function formatUpdatedAt(value: string): string {
+    const date = new Date(value);
+    return date.toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   async function handleSavePracticeProfile() {
@@ -355,6 +412,59 @@ function App() {
         </div>
 
         <div className="border-t border-lexai-border px-4 py-3">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-xs text-lexai-muted">本地会话</div>
+            <button
+              onClick={handleNewConversation}
+              className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text"
+            >
+              新建
+            </button>
+          </div>
+          <div className="max-h-48 space-y-2 overflow-y-auto">
+            {localConversations.length === 0 ? (
+              <div className="text-[11px] leading-5 text-lexai-muted">
+                本地模式下的聊天记录会保存在桌面端，并在这里显示。
+              </div>
+            ) : (
+              localConversations.map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className={`rounded-xl border p-3 ${
+                    activeLocalConversationId === conversation.id
+                      ? 'border-lexai-primary bg-lexai-primary/10'
+                      : 'border-lexai-border bg-lexai-bg/70'
+                  }`}
+                >
+                  <button
+                    onClick={() => void openLocalConversation(conversation.id)}
+                    className="w-full text-left"
+                  >
+                    <div className="truncate text-xs font-medium text-lexai-text">
+                      {conversation.title}
+                    </div>
+                    <div className="mt-1 text-[11px] text-lexai-muted">
+                      {formatUpdatedAt(conversation.updatedAt)} · {conversation.messageCount} 条消息
+                    </div>
+                  </button>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="truncate text-[11px] text-lexai-muted">
+                      {conversation.skillId || '未绑定 skill'}
+                    </div>
+                    <button
+                      onClick={() => void handleDeleteLocalConversation(conversation.id)}
+                      className="text-[11px] text-rose-300 hover:text-rose-200"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-lexai-border px-4 py-3">
           <div className="text-xs text-lexai-muted mb-2">本地 Profile</div>
           {selectedSkill ? (
             <div className="rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
@@ -405,6 +515,11 @@ function App() {
         <header className="min-h-12 bg-lexai-surface border-b border-lexai-border flex items-center justify-between px-4 py-3 gap-4">
           <div className="flex items-center gap-4">
             <span className="text-lexai-text">新对话</span>
+            {runtimeMode === 'local' && activeLocalConversationId && (
+              <span className="text-xs text-lexai-muted">
+                已载入本地会话
+              </span>
+            )}
             <span className="text-xs px-2 py-0.5 rounded bg-lexai-primary/20 text-lexai-primary">
               {jurisdictionLabels[jurisdiction]}
             </span>
@@ -488,11 +603,14 @@ function App() {
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-lexai-muted">
-                    默认推荐 embedded runtime，不依赖用户系统先安装 Ollama；若本机存在 Ollama，可走兼容 provider。
-                  </p>
+                      默认推荐 embedded runtime，不依赖用户系统先安装 Ollama；若本机存在 Ollama，可走兼容 provider。
+                    </p>
+                    <p className="mt-2 text-xs text-lexai-muted">
+                      本地模式下消息历史会保存在桌面端，不经过后端。
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
           ) : (
             <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
               {conversation.map((message, index) => (

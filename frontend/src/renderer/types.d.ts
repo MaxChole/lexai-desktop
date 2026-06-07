@@ -17,12 +17,36 @@ export interface DesktopChatResponse {
   content: string;
   model: string;
   provider: string;
+  conversationId?: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
     cacheReadTokens?: number;
     cacheCreationTokens?: number;
   };
+}
+
+export interface LocalConversationMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  meta?: string;
+}
+
+export interface LocalConversationSummary {
+  id: string;
+  title: string;
+  skillId?: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface LocalConversationRecord {
+  id: string;
+  title: string;
+  skillId?: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: LocalConversationMessage[];
 }
 
 export interface LexaiBridge {
@@ -38,8 +62,13 @@ export interface LexaiBridge {
     get: (plugin: string) => Promise<string>;
     set: (plugin: string, content: string) => Promise<{ ok: true }>;
   };
+  localChat: {
+    list: () => Promise<LocalConversationSummary[]>;
+    get: (conversationId: string) => Promise<LocalConversationRecord | null>;
+    delete: (conversationId: string) => Promise<{ ok: true }>;
+  };
   chat: {
-    send: (message: string, skillId?: string) => Promise<DesktopChatResponse>;
+    send: (message: string, skillId?: string, conversationId?: string) => Promise<DesktopChatResponse>;
   };
   platform: string;
   onNotification: (callback: (data: unknown) => void) => void;

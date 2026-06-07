@@ -5,11 +5,13 @@ import {
   LocalInferenceSidecar,
   loadLocalInferenceConfig,
 } from './local-inference-sidecar.js';
+import { LocalChatStore } from './local-chat-store.js';
 import { LocalSkillEngine } from './local-skill-engine.js';
 
 let mainWindow: BrowserWindow | null = null;
 const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
 const localProfilesDir = path.join(app.getPath('userData'), 'practice-profiles');
+const localChatStore = new LocalChatStore();
 const localSkillEngine = new LocalSkillEngine(localProfilesDir);
 const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
   defaults: {
@@ -20,12 +22,14 @@ const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
 interface ChatRequestPayload {
   message: string;
   skillId?: string;
+  conversationId?: string;
 }
 
 interface ChatResponsePayload {
   content: string;
   model: string;
   provider: string;
+  conversationId?: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -100,6 +104,19 @@ ipcMain.handle('practice-profile:set', async (_event, payload: { plugin: string;
   return { ok: true };
 });
 
+ipcMain.handle('local-chat:list', async () => {
+  return localChatStore.listConversations();
+});
+
+ipcMain.handle('local-chat:get', async (_event, conversationId: string) => {
+  return localChatStore.getConversation(conversationId);
+});
+
+ipcMain.handle('local-chat:delete', async (_event, conversationId: string) => {
+  localChatStore.deleteConversation(conversationId);
+  return { ok: true };
+});
+
 ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise<ChatResponsePayload> => {
   const runtimeMode = settingsStore.get('runtimeMode');
 
@@ -140,7 +157,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
-    return {
+    const chatResponse: ChatResponsePayload = {
       content: data.choices[0]?.message?.content || '',
       model: data.model || localStatus.model,
       provider: localStatus.provider === 'ollama' ? 'local-ollama' : 'local-embedded',
@@ -150,6 +167,26 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
         cacheReadTokens: 0,
         cacheCreationTokens: 0,
       },
+    };
+
+    const conversation = localChatStore.saveExchange({
+      conversationId: payload.conversationId,
+      skillId: payload.skillId,
+      userMessage: {
+        role: 'user',
+        content: payload.message,
+        meta: payload.skillId ? `skill · ${payload.skillId}` : undefined,
+      },
+      assistantMessage: {
+        role: 'assistant',
+        content: chatResponse.content,
+        meta: `${chatResponse.provider} · ${chatResponse.model}`,
+      },
+    });
+
+    return {
+      ...chatResponse,
+      conversationId: conversation.id,
     };
   }
 

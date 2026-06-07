@@ -16,6 +16,7 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- 本地模式聊天数据开始落到桌面端：Electron 侧已接入本地会话存储，支持保存、读取、切换和删除本地聊天历史，不再依赖后端会话接口
 - 本地模式的 practice profile 已支持用户级本地覆盖：Electron 保存插件专属 profile，前端可直接编辑，生成 prompt 时优先使用本地内容再回退到仓库模板
 - 本地模式 prompt 进一步对齐参考工作流：Electron Main 在解析 `SKILL.md` 之外，会同时注入对应插件的 `CLAUDE.md` practice profile 模板
 - 本地模式发送链路已支持 skill prompt：选中 skill 后，云端与本地模式都会携带 `skillId`，本地模式由 Electron Main 直接解析参考仓库中的 `SKILL.md`
