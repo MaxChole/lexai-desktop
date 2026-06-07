@@ -17,7 +17,8 @@ const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig
 const localProfilesDir = path.join(app.getPath('userData'), 'practice-profiles');
 const localDocumentsDir = path.join(app.getPath('userData'), 'local-documents');
 const localModelsDir = path.join(app.getPath('userData'), 'local-models');
-const localChatStore = new LocalChatStore();
+const localDbPath = path.join(app.getPath('userData'), 'local.db');
+const localChatStore = new LocalChatStore(localDbPath);
 const localDocumentStore = new LocalDocumentStore(localDocumentsDir);
 const localModelManager = new LocalModelManager(localModelsDir, process.env.LOCAL_LLM_MODEL_URL);
 const localSkillEngine = new LocalSkillEngine(localProfilesDir);
@@ -129,16 +130,16 @@ ipcMain.handle('practice-profile:set', async (_event, payload: { plugin: string;
 });
 
 ipcMain.handle('local-chat:list', async () => {
-  return localChatStore.listConversations();
+  return await localChatStore.listConversations();
 });
 
 ipcMain.handle('local-chat:get', async (_event, conversationId: string) => {
-  return localChatStore.getConversation(conversationId);
+  return await localChatStore.getConversation(conversationId);
 });
 
 ipcMain.handle('local-chat:delete', async (_event, conversationId: string) => {
   await localDocumentStore.deleteConversationFiles(conversationId);
-  localChatStore.deleteConversation(conversationId);
+  await localChatStore.deleteConversation(conversationId);
   return { ok: true };
 });
 
@@ -159,9 +160,9 @@ ipcMain.handle('local-document:pick', async (_event, payload: { conversationId?:
   }
 
   const conversation = payload.conversationId
-    ? localChatStore.getConversation(payload.conversationId)
+    ? await localChatStore.getConversation(payload.conversationId)
     : null;
-  const ensuredConversation = conversation ?? localChatStore.createConversation(payload.skillId);
+  const ensuredConversation = conversation ?? await localChatStore.createConversation(payload.skillId);
   const fileStats = await Promise.all(result.filePaths.map(async (filePath) => {
     const stat = await fs.promises.stat(filePath);
     return {
@@ -171,7 +172,7 @@ ipcMain.handle('local-document:pick', async (_event, payload: { conversationId?:
     };
   }));
   const storedDocuments = await localDocumentStore.saveFiles(ensuredConversation.id, fileStats);
-  const updatedConversation = localChatStore.addAttachments({
+  const updatedConversation = await localChatStore.addAttachments({
     conversationId: ensuredConversation.id,
     skillId: payload.skillId,
     attachments: storedDocuments,
@@ -200,7 +201,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       messages.push({ role: 'system', content: systemPrompt });
     }
     const existingConversation = payload.conversationId
-      ? localChatStore.getConversation(payload.conversationId)
+      ? await localChatStore.getConversation(payload.conversationId)
       : null;
     const attachmentContext = await localDocumentStore.buildAttachmentContext(existingConversation?.attachments ?? []);
     if (attachmentContext) {
@@ -244,7 +245,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       },
     };
 
-    const conversation = localChatStore.saveExchange({
+    const conversation = await localChatStore.saveExchange({
       conversationId: payload.conversationId,
       skillId: payload.skillId,
       userMessage: {
