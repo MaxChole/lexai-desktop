@@ -3,6 +3,7 @@ import { SkillRegistry, SkillEngine } from '../services/skill-engine/index.js';
 import { ModelRouter } from '../services/model-router/index.js';
 import { resolveReferencesDir } from '../services/reference-path.js';
 import { getAuthenticatedUserFromToken, readBearerToken } from '../services/auth.js';
+import { saveChatSessionExchange } from '../services/cases.js';
 import { recordTokenUsage } from '../services/usage.js';
 import type { Jurisdiction, Plan } from '../types/shared.js';
 
@@ -23,9 +24,11 @@ async function ensureRegistry(): Promise<SkillRegistry> {
 export default async function chatRoutes(app: FastifyInstance) {
   // POST /chat — simple non-streaming chat endpoint (for testing)
   app.post('/chat', async (request, reply) => {
-    const { message, skillId, jurisdiction, plan } = request.body as {
+    const { message, skillId, caseId, sessionId, jurisdiction, plan } = request.body as {
       message: string;
       skillId?: string;
+      caseId?: string;
+      sessionId?: string;
       jurisdiction?: Jurisdiction;
       plan?: Plan;
     };
@@ -58,9 +61,23 @@ export default async function chatRoutes(app: FastifyInstance) {
       plan || 'starter',
     );
 
+    const session = authenticated?.appUser
+      ? await saveChatSessionExchange({
+          userId: authenticated.appUser.id,
+          sessionId,
+          caseId,
+          skillId,
+          jurisdiction,
+          model: result.model,
+          userMessage: message,
+          assistantMessage: result.content,
+        })
+      : null;
+
     if (authenticated?.appUser) {
       await recordTokenUsage({
         userId: authenticated.appUser.id,
+        sessionId: session?.id,
         model: result.model,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
@@ -73,6 +90,7 @@ export default async function chatRoutes(app: FastifyInstance) {
       content: result.content,
       model: result.model,
       provider: result.provider,
+      sessionId: session?.id,
       usage: {
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,

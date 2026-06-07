@@ -16,6 +16,7 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- T-07 案件与文档管理已接入首个完整闭环：后端新增 `cases/documents/sessions` 数据层与案件搜索接口，云端聊天可绑定案件并写入会话历史，前端新增案件库、文档登记上传、案件内会话筛选与离线缓存
 - T-09 用量追踪开始落地：云端聊天会在已登录状态下记录 `token_usage`，后端新增月度用量统计接口，前端新增账户用量卡与 80%/100% 用量提示
 - T-05 核心对话 UI 明显收口：前端补充 Slash Command 技能补全、Markdown/代码渲染、验证标记高亮，以及本地模式拖拽上传入口
 - T-04 认证与计费开始落地：后端新增 Supabase 邮箱注册/登录/当前用户接口、Stripe 订阅接口与 webhook 路由，Electron Main 新增本地加密会话令牌存储桥接

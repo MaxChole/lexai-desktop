@@ -19,8 +19,23 @@ contextBridge.exposeInMainWorld('lexai', {
     set: (payload: { accessToken: string; refreshToken?: string; expiresAt?: number | null }) => ipcRenderer.invoke('auth-session:set', payload),
     clear: () => ipcRenderer.invoke('auth-session:clear'),
   },
+  auth: {
+    getCurrentUser: () => ipcRenderer.invoke('auth:get-current-user'),
+  },
   usage: {
     getCurrent: () => ipcRenderer.invoke('usage:get-current'),
+  },
+  cases: {
+    list: (filters?: { q?: string; jurisdiction?: string }) => ipcRenderer.invoke('cases:list', filters),
+    create: (payload: { title: string; description?: string; tags?: string[]; jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL' }) => ipcRenderer.invoke('cases:create', payload),
+    update: (payload: { caseId: string; title?: string; description?: string; tags?: string[]; jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL' }) => ipcRenderer.invoke('cases:update', payload),
+    get: (payload: { caseId: string; q?: string; skillId?: string; dateFrom?: string; dateTo?: string }) => ipcRenderer.invoke('cases:get', payload),
+    delete: (caseId: string) => ipcRenderer.invoke('cases:delete', caseId),
+  },
+  documents: {
+    createUpload: (payload: { caseId: string; filename: string; mimeType: string; sizeBytes: number }) => ipcRenderer.invoke('documents:create-upload', payload),
+    register: (payload: { caseId: string; documentId: string; filename: string; mimeType: string; sizeBytes: number; s3Key: string }) => ipcRenderer.invoke('documents:register', payload),
+    delete: (payload: { caseId: string; documentId: string }) => ipcRenderer.invoke('documents:delete', payload),
   },
   runtimeMode: {
     get: () => ipcRenderer.invoke('runtime-mode:get'),
@@ -42,7 +57,8 @@ contextBridge.exposeInMainWorld('lexai', {
     open: (filePath: string) => ipcRenderer.invoke('local-document:open', filePath),
   },
   chat: {
-    send: (message: string, skillId?: string, conversationId?: string) => ipcRenderer.invoke('chat:send', { message, skillId, conversationId }),
+    send: (message: string, skillId?: string, conversationId?: string, caseId?: string, sessionId?: string, jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS') =>
+      ipcRenderer.invoke('chat:send', { message, skillId, conversationId, caseId, sessionId, jurisdiction }),
   },
 
   // Platform info

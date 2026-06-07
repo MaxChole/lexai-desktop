@@ -36,6 +36,13 @@ export interface AuthSessionState {
   expiresAt?: number | null;
 }
 
+export interface AuthenticatedUser {
+  id: string;
+  email: string;
+  plan: 'starter' | 'professional' | 'enterprise';
+  role: 'member' | 'admin';
+}
+
 export interface UsageCurrentState {
   plan: 'starter' | 'professional' | 'enterprise';
   periodStart: string;
@@ -58,12 +65,59 @@ export interface DesktopChatResponse {
   model: string;
   provider: string;
   conversationId?: string;
+  sessionId?: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
     cacheReadTokens?: number;
     cacheCreationTokens?: number;
   };
+}
+
+export interface CloudCaseSummary {
+  id: string;
+  title: string;
+  description?: string;
+  tags: string[];
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL';
+  createdAt: string;
+  updatedAt: string;
+  documentCount?: number;
+  sessionCount?: number;
+}
+
+export interface CloudDocumentRecord {
+  id: string;
+  caseId: string;
+  filename: string;
+  s3Key: string;
+  sizeBytes: number;
+  mimeType: string;
+  createdAt: string;
+}
+
+export interface CloudSessionMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+export interface CloudSessionRecord {
+  id: string;
+  caseId?: string;
+  skillId?: string;
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS';
+  model: string;
+  title?: string;
+  messages: CloudSessionMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CloudCaseDetail {
+  case: CloudCaseSummary;
+  documents: CloudDocumentRecord[];
+  sessions: CloudSessionRecord[];
 }
 
 export interface LocalConversationMessage {
@@ -116,8 +170,23 @@ export interface LexaiBridge {
     set: (payload: AuthSessionState & { accessToken: string }) => Promise<AuthSessionState>;
     clear: () => Promise<{ ok: true }>;
   };
+  auth: {
+    getCurrentUser: () => Promise<AuthenticatedUser | null>;
+  };
   usage: {
     getCurrent: () => Promise<UsageCurrentState | null>;
+  };
+  cases: {
+    list: (filters?: { q?: string; jurisdiction?: string }) => Promise<CloudCaseSummary[]>;
+    create: (payload: { title: string; description?: string; tags?: string[]; jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL' }) => Promise<CloudCaseSummary>;
+    update: (payload: { caseId: string; title?: string; description?: string; tags?: string[]; jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL' }) => Promise<CloudCaseSummary>;
+    get: (payload: { caseId: string; q?: string; skillId?: string; dateFrom?: string; dateTo?: string }) => Promise<CloudCaseDetail | null>;
+    delete: (caseId: string) => Promise<{ ok: true }>;
+  };
+  documents: {
+    createUpload: (payload: { caseId: string; filename: string; mimeType: string; sizeBytes: number }) => Promise<{ uploadUrl: string; documentId: string; s3Key: string; expiresIn: number }>;
+    register: (payload: { caseId: string; documentId: string; filename: string; mimeType: string; sizeBytes: number; s3Key: string }) => Promise<CloudDocumentRecord>;
+    delete: (payload: { caseId: string; documentId: string }) => Promise<{ ok: true }>;
   };
   runtimeMode: {
     get: () => Promise<'cloud' | 'local'>;
@@ -138,7 +207,7 @@ export interface LexaiBridge {
     open: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
   };
   chat: {
-    send: (message: string, skillId?: string, conversationId?: string) => Promise<DesktopChatResponse>;
+    send: (message: string, skillId?: string, conversationId?: string, caseId?: string, sessionId?: string, jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS') => Promise<DesktopChatResponse>;
   };
   platform: string;
   onNotification: (callback: (data: unknown) => void) => void;

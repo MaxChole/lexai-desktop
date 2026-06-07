@@ -45,6 +45,30 @@ export interface Session {
   updatedAt: string;
 }
 
+export interface CaseRecord {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  tags: string[];
+  jurisdiction?: Jurisdiction | 'ALL';
+  createdAt: string;
+  updatedAt: string;
+  documentCount?: number;
+  sessionCount?: number;
+}
+
+export interface DocumentRecord {
+  id: string;
+  caseId: string;
+  userId: string;
+  filename: string;
+  s3Key: string;
+  sizeBytes: number;
+  mimeType: string;
+  createdAt: string;
+}
+
 export interface SSEChunk {
   type: 'content_delta' | 'usage' | 'done' | 'error';
   delta?: string;

@@ -7,6 +7,10 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-typescript';
 import type {
+  AuthenticatedUser,
+  CloudCaseDetail,
+  CloudCaseSummary,
+  CloudDocumentRecord,
   DesktopChatResponse,
   LocalConversationAttachment,
   LocalConversationRecord,
@@ -47,6 +51,12 @@ interface ConversationMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   meta?: string;
+}
+
+interface CaseFormState {
+  title: string;
+  description: string;
+  tags: string;
 }
 
 const defaultLocalInferenceStatus: LocalInferenceStatus = {
@@ -177,6 +187,22 @@ function App() {
   const [practiceProfileMessage, setPracticeProfileMessage] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [usageSummary, setUsageSummary] = useState<UsageCurrentState | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
+  const [cloudCases, setCloudCases] = useState<CloudCaseSummary[]>([]);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [selectedCaseDetail, setSelectedCaseDetail] = useState<CloudCaseDetail | null>(null);
+  const [cloudSessionId, setCloudSessionId] = useState<string | null>(null);
+  const [caseSearch, setCaseSearch] = useState('');
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [sessionSkillFilter, setSessionSkillFilter] = useState('');
+  const [sessionDateFrom, setSessionDateFrom] = useState('');
+  const [sessionDateTo, setSessionDateTo] = useState('');
+  const [caseForm, setCaseForm] = useState<CaseFormState>({ title: '', description: '', tags: '' });
+  const [caseSaving, setCaseSaving] = useState(false);
+  const [caseMessage, setCaseMessage] = useState<string | null>(null);
+  const [caseLoading, setCaseLoading] = useState(false);
+  const [caseDetailLoading, setCaseDetailLoading] = useState(false);
+  const [documentUploading, setDocumentUploading] = useState(false);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -230,6 +256,57 @@ function App() {
     }
   }
 
+  async function loadCurrentUser() {
+    try {
+      setCurrentUser(await window.lexai.auth.getCurrentUser());
+    } catch (error) {
+      console.error('Current user error:', error);
+      setCurrentUser(null);
+    }
+  }
+
+  async function loadCloudCases(searchText = caseSearch) {
+    setCaseLoading(true);
+    try {
+      const result = await window.lexai.cases.list({
+        q: searchText.trim() || undefined,
+        jurisdiction: jurisdiction === 'ALL' ? undefined : jurisdiction,
+      });
+      setCloudCases(result);
+      if (!selectedCaseId && result[0]) {
+        setSelectedCaseId(result[0].id);
+      }
+      if (selectedCaseId && !result.some((item) => item.id === selectedCaseId)) {
+        setSelectedCaseId(result[0]?.id ?? null);
+      }
+    } catch (error) {
+      console.error('Case list error:', error);
+      setCaseMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCaseLoading(false);
+    }
+  }
+
+  async function loadCaseDetail(caseId: string) {
+    setCaseDetailLoading(true);
+    try {
+      const detail = await window.lexai.cases.get({
+        caseId,
+        q: sessionSearch.trim() || undefined,
+        skillId: sessionSkillFilter.trim() || undefined,
+        dateFrom: sessionDateFrom || undefined,
+        dateTo: sessionDateTo || undefined,
+      });
+      setSelectedCaseDetail(detail);
+    } catch (error) {
+      console.error('Case detail error:', error);
+      setCaseMessage(error instanceof Error ? error.message : String(error));
+      setSelectedCaseDetail(null);
+    } finally {
+      setCaseDetailLoading(false);
+    }
+  }
+
   async function openLocalConversation(conversationId: string) {
     const storedConversation = await window.lexai.localChat.get(conversationId);
     if (!storedConversation) return;
@@ -267,6 +344,7 @@ function App() {
     void loadLocalModelStatus();
     void loadLocalConversations();
     void loadUsageSummary();
+    void loadCurrentUser();
     void window.lexai.runtimeMode.get().then((mode) => setRuntimeMode(mode));
 
     const intervalId = window.setInterval(() => {
@@ -277,6 +355,21 @@ function App() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (runtimeMode === 'cloud') {
+      void loadCloudCases();
+    }
+  }, [runtimeMode, jurisdiction]);
+
+  useEffect(() => {
+    if (runtimeMode === 'cloud' && selectedCaseId) {
+      void loadCaseDetail(selectedCaseId);
+    } else if (runtimeMode === 'cloud') {
+      setSelectedCaseDetail(null);
+      setCloudSessionId(null);
+    }
+  }, [runtimeMode, selectedCaseId, sessionSearch, sessionSkillFilter, sessionDateFrom, sessionDateTo]);
 
   useEffect(() => {
     if (!selectedSkill) {
@@ -443,7 +536,14 @@ function App() {
     setInputText('');
 
     try {
-      const result: DesktopChatResponse = await window.lexai.chat.send(trimmed, selectedSkill?.id, activeLocalConversationId ?? undefined);
+      const result: DesktopChatResponse = await window.lexai.chat.send(
+        trimmed,
+        selectedSkill?.id,
+        activeLocalConversationId ?? undefined,
+        runtimeMode === 'cloud' ? selectedCaseId ?? undefined : undefined,
+        runtimeMode === 'cloud' ? cloudSessionId ?? undefined : undefined,
+        jurisdiction === 'ALL' ? undefined : jurisdiction,
+      );
       if (runtimeMode === 'local' && result.conversationId) {
         setActiveLocalConversationId(result.conversationId);
         await openLocalConversation(result.conversationId);
@@ -453,6 +553,13 @@ function App() {
           ...current,
           { role: 'assistant', content: result.content, meta: `${result.provider} · ${result.model}` },
         ]);
+        if (result.sessionId) {
+          setCloudSessionId(result.sessionId);
+        }
+        if (selectedCaseId) {
+          await loadCloudCases(caseSearch);
+          await loadCaseDetail(selectedCaseId);
+        }
       }
     } catch (error) {
       setConversation((current) => [
@@ -492,6 +599,104 @@ function App() {
     setConversation([]);
     setActiveLocalConversationId(null);
     setActiveAttachments([]);
+    setCloudSessionId(null);
+  }
+
+  async function handleCreateCase() {
+    if (!caseForm.title.trim() || caseSaving) return;
+    setCaseSaving(true);
+    setCaseMessage(null);
+    try {
+      const created = await window.lexai.cases.create({
+        title: caseForm.title.trim(),
+        description: caseForm.description.trim() || undefined,
+        tags: caseForm.tags.split(',').map((item) => item.trim()).filter(Boolean),
+        jurisdiction: jurisdiction,
+      });
+      setCaseForm({ title: '', description: '', tags: '' });
+      setSelectedCaseId(created.id);
+      await loadCloudCases('');
+      await loadCaseDetail(created.id);
+      setCaseMessage('案件已创建');
+    } catch (error) {
+      setCaseMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCaseSaving(false);
+    }
+  }
+
+  async function handleDeleteCase(caseId: string) {
+    await window.lexai.cases.delete(caseId);
+    if (selectedCaseId === caseId) {
+      setSelectedCaseId(null);
+      setSelectedCaseDetail(null);
+      setCloudSessionId(null);
+      setConversation([]);
+    }
+    await loadCloudCases('');
+  }
+
+  async function handleCloudDocumentUpload(fileList: FileList | null) {
+    if (!selectedCaseId || !fileList?.length) return;
+    setDocumentUploading(true);
+    setCaseMessage(null);
+    try {
+      for (const file of Array.from(fileList)) {
+        const upload = await window.lexai.documents.createUpload({
+          caseId: selectedCaseId,
+          filename: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+        });
+        const uploadResponse = await fetch(upload.uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+          },
+          body: file,
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`上传失败: ${file.name}`);
+        }
+        await window.lexai.documents.register({
+          caseId: selectedCaseId,
+          documentId: upload.documentId,
+          filename: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+          s3Key: upload.s3Key,
+        });
+      }
+      await loadCloudCases(caseSearch);
+      await loadCaseDetail(selectedCaseId);
+      setCaseMessage('文档已上传并登记');
+    } catch (error) {
+      setCaseMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDocumentUploading(false);
+    }
+  }
+
+  async function handleDeleteCloudDocument(document: CloudDocumentRecord) {
+    await window.lexai.documents.delete({
+      caseId: document.caseId,
+      documentId: document.id,
+    });
+    if (selectedCaseId) {
+      await loadCaseDetail(selectedCaseId);
+      await loadCloudCases(caseSearch);
+    }
+  }
+
+  function openCloudSession(sessionId: string) {
+    const session = selectedCaseDetail?.sessions.find((item) => item.id === sessionId);
+    if (!session) return;
+    setCloudSessionId(session.id);
+    setConversation(session.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      meta: message.role === 'assistant' ? `${session.model}${session.skillId ? ` · ${session.skillId}` : ''}` : undefined,
+    })));
   }
 
   return (
@@ -629,6 +834,77 @@ function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {runtimeMode === 'cloud' && (
+            <div className="mb-4 rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-lexai-muted">案件库</div>
+                  <div className="mt-1 text-sm font-medium text-lexai-text">
+                    {currentUser ? currentUser.email : '未登录'}
+                  </div>
+                </div>
+                <button onClick={() => void loadCloudCases()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
+              </div>
+              <input
+                value={caseSearch}
+                onChange={(event) => setCaseSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void loadCloudCases(event.currentTarget.value);
+                }}
+                placeholder="搜索案件标题 / 标签"
+                className="mt-3 w-full rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+              />
+              <div className="mt-3 grid gap-2">
+                <input
+                  value={caseForm.title}
+                  onChange={(event) => setCaseForm((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="新建案件标题"
+                  className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+                />
+                <textarea
+                  value={caseForm.description}
+                  onChange={(event) => setCaseForm((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="案件描述"
+                  className="h-20 resize-none rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+                />
+                <input
+                  value={caseForm.tags}
+                  onChange={(event) => setCaseForm((current) => ({ ...current, tags: event.target.value }))}
+                  placeholder="标签，逗号分隔"
+                  className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+                />
+                <button
+                  onClick={() => void handleCreateCase()}
+                  disabled={caseSaving || !caseForm.title.trim()}
+                  className={`rounded-xl px-3 py-2 text-sm ${caseSaving || !caseForm.title.trim() ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70' : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'}`}
+                >
+                  {caseSaving ? '创建中...' : '新建案件'}
+                </button>
+              </div>
+              {caseMessage && <div className="mt-2 text-[11px] text-lexai-muted">{caseMessage}</div>}
+              <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
+                {caseLoading ? (
+                  <div className="text-[11px] text-lexai-muted">加载案件中...</div>
+                ) : cloudCases.length === 0 ? (
+                  <div className="text-[11px] text-lexai-muted">登录后可创建案件，并将云端会话与文档绑定到案件。</div>
+                ) : (
+                  cloudCases.map((item) => (
+                    <div key={item.id} className={`rounded-xl border p-3 ${selectedCaseId === item.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-lexai-border bg-lexai-surface/60'}`}>
+                      <button onClick={() => setSelectedCaseId(item.id)} className="w-full text-left">
+                        <div className="truncate text-sm font-medium text-lexai-text">{item.title}</div>
+                        <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(item.updatedAt)} · {item.documentCount ?? 0} 文档 · {item.sessionCount ?? 0} 会话</div>
+                      </button>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="truncate text-[11px] text-lexai-muted">{item.tags.join(' · ') || '无标签'}</div>
+                        <button onClick={() => void handleDeleteCase(item.id)} className="text-[11px] text-rose-300 hover:text-rose-200">删除</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="mb-2 mt-2 text-xs text-lexai-muted">Skills & Agents ({filtered.length})</div>
           <input
             value={search}
@@ -752,6 +1028,74 @@ function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {runtimeMode === 'cloud' && selectedCaseDetail && (
+            <div className="mx-auto mb-4 grid w-full max-w-5xl gap-4 lg:grid-cols-[1.1fr,0.9fr]">
+              <div className="rounded-3xl border border-lexai-border bg-lexai-surface p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xs text-lexai-muted">当前案件</div>
+                    <div className="mt-1 text-lg font-semibold text-lexai-text">{selectedCaseDetail.case.title}</div>
+                    {selectedCaseDetail.case.description && <p className="mt-2 text-sm leading-6 text-lexai-muted">{selectedCaseDetail.case.description}</p>}
+                  </div>
+                  <label className={`rounded-xl px-3 py-2 text-sm ${documentUploading ? 'bg-lexai-primary/40 text-white/70' : 'cursor-pointer bg-lexai-primary text-white hover:bg-lexai-primary/80'}`}>
+                    {documentUploading ? '上传中...' : '上传文档'}
+                    <input
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => void handleCloudDocumentUpload(event.target.files)}
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedCaseDetail.case.tags.map((tag) => (
+                    <span key={tag} className="rounded-full border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted">{tag}</span>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2">
+                  {selectedCaseDetail.documents.length === 0 ? (
+                    <div className="text-sm text-lexai-muted">还没有云端文档。上传后会登记到当前案件。</div>
+                  ) : (
+                    selectedCaseDetail.documents.map((document) => (
+                      <div key={document.id} className="flex items-center justify-between gap-3 rounded-2xl border border-lexai-border bg-lexai-bg/50 px-3 py-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm text-lexai-text">{document.filename}</div>
+                          <div className="mt-1 text-[11px] text-lexai-muted">{formatFileSize(document.sizeBytes)} · {formatUpdatedAt(document.createdAt)}</div>
+                        </div>
+                        <button onClick={() => void handleDeleteCloudDocument(document)} className="text-xs text-rose-300 hover:text-rose-200">删除</button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="rounded-3xl border border-lexai-border bg-lexai-surface p-4">
+                <div className="text-xs text-lexai-muted">会话历史搜索</div>
+                <div className="mt-3 grid gap-2">
+                  <input value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value)} placeholder="关键词" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none" />
+                  <input value={sessionSkillFilter} onChange={(event) => setSessionSkillFilter(event.target.value)} placeholder="Skill 名" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={sessionDateFrom} onChange={(event) => setSessionDateFrom(event.target.value)} type="date" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text outline-none" />
+                    <input value={sessionDateTo} onChange={(event) => setSessionDateTo(event.target.value)} type="date" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text outline-none" />
+                  </div>
+                </div>
+                <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
+                  {caseDetailLoading ? (
+                    <div className="text-sm text-lexai-muted">加载会话中...</div>
+                  ) : selectedCaseDetail.sessions.length === 0 ? (
+                    <div className="text-sm text-lexai-muted">当前筛选条件下还没有会话。</div>
+                  ) : (
+                    selectedCaseDetail.sessions.map((session) => (
+                      <button key={session.id} onClick={() => openCloudSession(session.id)} className={`w-full rounded-2xl border px-3 py-3 text-left ${cloudSessionId === session.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-lexai-border bg-lexai-bg/50'}`}>
+                        <div className="truncate text-sm font-medium text-lexai-text">{session.title || '未命名会话'}</div>
+                        <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(session.updatedAt)} · {session.skillId || session.model}</div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {runtimeMode === 'local' && activeAttachments.length > 0 && (
             <div className="mx-auto mb-4 flex w-full max-w-5xl flex-wrap gap-2">
               {activeAttachments.map((attachment) => (
@@ -892,7 +1236,9 @@ function App() {
                 <div className="shrink-0">
                   {runtimeMode === 'local'
                     ? '本地模式支持拖拽上传'
-                    : '云端模式暂未接入上传后端'}
+                    : selectedCaseId
+                      ? '云端模式可上传文档到当前案件'
+                      : '先选择或创建案件，再将云端会话与文档绑定'}
                 </div>
               </div>
             </div>

@@ -29,11 +29,24 @@ const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
     runtimeMode: 'cloud',
   },
 });
+const caseCacheStore = new Store<{
+  caseList: CaseSummary[];
+  caseDetails: Record<string, CaseDetailResponse>;
+}>({
+  name: 'case-cache',
+  defaults: {
+    caseList: [],
+    caseDetails: {},
+  },
+});
 
 interface ChatRequestPayload {
   message: string;
   skillId?: string;
   conversationId?: string;
+  caseId?: string;
+  sessionId?: string;
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS';
 }
 
 interface ChatResponsePayload {
@@ -41,6 +54,7 @@ interface ChatResponsePayload {
   model: string;
   provider: string;
   conversationId?: string;
+  sessionId?: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -72,8 +86,89 @@ interface UsageCurrentResponse {
   hardLimit: number;
 }
 
+interface CurrentUserResponse {
+  user: {
+    id: string;
+    email: string;
+    plan: 'starter' | 'professional' | 'enterprise';
+    role: 'member' | 'admin';
+  };
+}
+
+interface CaseSummary {
+  id: string;
+  title: string;
+  description?: string;
+  tags: string[];
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL';
+  createdAt: string;
+  updatedAt: string;
+  documentCount?: number;
+  sessionCount?: number;
+}
+
+interface CloudDocumentRecord {
+  id: string;
+  caseId: string;
+  filename: string;
+  s3Key: string;
+  sizeBytes: number;
+  mimeType: string;
+  createdAt: string;
+}
+
+interface CloudSessionRecord {
+  id: string;
+  caseId?: string;
+  skillId?: string;
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS';
+  model: string;
+  title?: string;
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string; timestamp: string }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CaseDetailResponse {
+  case: CaseSummary;
+  documents: CloudDocumentRecord[];
+  sessions: CloudSessionRecord[];
+}
+
 function getApiBaseUrl(): string {
   return process.env.VITE_API_BASE_URL || 'http://localhost:3001/v1';
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const session = secureTokenStore.getSession();
+  if (!session.accessToken) {
+    throw new Error('AUTH_REQUIRED');
+  }
+
+  return {
+    Authorization: `Bearer ${session.accessToken}`,
+  };
+}
+
+async function fetchAuthedJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (response.status === 401) {
+    throw new Error('AUTH_REQUIRED');
+  }
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${await response.text()}`);
+  }
+
+  return await response.json() as T;
 }
 
 function createWindow() {
@@ -157,26 +252,162 @@ ipcMain.handle('auth-session:clear', async () => {
   return secureTokenStore.clearSession();
 });
 
-ipcMain.handle('usage:get-current', async (): Promise<UsageCurrentResponse | null> => {
-  const session = secureTokenStore.getSession();
-  if (!session.accessToken) {
-    return null;
-  }
-
-  const response = await fetch(`${getApiBaseUrl()}/usage/current`, {
-    headers: {
-      Authorization: `Bearer ${session.accessToken}`,
-    },
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
+ipcMain.handle('auth:get-current-user', async (): Promise<CurrentUserResponse['user'] | null> => {
+  try {
+    const payload = await fetchAuthedJson<CurrentUserResponse>(`${getApiBaseUrl()}/auth/me`, {
+      method: 'GET',
+    });
+    return payload.user;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'AUTH_REQUIRED') {
       return null;
     }
-    throw new Error(`Usage API error: ${response.status} ${await response.text()}`);
+    throw error;
   }
+});
 
-  return await response.json() as UsageCurrentResponse;
+ipcMain.handle('usage:get-current', async (): Promise<UsageCurrentResponse | null> => {
+  try {
+    return await fetchAuthedJson<UsageCurrentResponse>(`${getApiBaseUrl()}/usage/current`, {
+      method: 'GET',
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'AUTH_REQUIRED') {
+      return null;
+    }
+    throw error;
+  }
+});
+
+ipcMain.handle('cases:list', async (_event, filters: { q?: string; jurisdiction?: string } = {}) => {
+  try {
+    const searchParams = new URLSearchParams();
+    if (filters.q?.trim()) searchParams.set('q', filters.q.trim());
+    if (filters.jurisdiction?.trim()) searchParams.set('jurisdiction', filters.jurisdiction.trim());
+    const suffix = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const payload = await fetchAuthedJson<{ cases: CaseSummary[] }>(`${getApiBaseUrl()}/cases${suffix}`, {
+      method: 'GET',
+    });
+    caseCacheStore.set('caseList', payload.cases);
+    return payload.cases;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'AUTH_REQUIRED') {
+      return caseCacheStore.get('caseList');
+    }
+    throw error;
+  }
+});
+
+ipcMain.handle('cases:create', async (_event, payload: {
+  title: string;
+  description?: string;
+  tags?: string[];
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL';
+}) => {
+  const result = await fetchAuthedJson<{ case: CaseSummary }>(`${getApiBaseUrl()}/cases`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  caseCacheStore.set('caseList', [result.case, ...caseCacheStore.get('caseList').filter((item) => item.id !== result.case.id)]);
+  return result.case;
+});
+
+ipcMain.handle('cases:update', async (_event, payload: {
+  caseId: string;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL';
+}) => {
+  const result = await fetchAuthedJson<{ case: CaseSummary }>(`${getApiBaseUrl()}/cases/${payload.caseId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  caseCacheStore.set('caseList', caseCacheStore.get('caseList').map((item) => item.id === result.case.id ? result.case : item));
+  return result.case;
+});
+
+ipcMain.handle('cases:get', async (_event, payload: {
+  caseId: string;
+  q?: string;
+  skillId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) => {
+  try {
+    const searchParams = new URLSearchParams();
+    if (payload.q?.trim()) searchParams.set('q', payload.q.trim());
+    if (payload.skillId?.trim()) searchParams.set('skillId', payload.skillId.trim());
+    if (payload.dateFrom?.trim()) searchParams.set('dateFrom', payload.dateFrom.trim());
+    if (payload.dateTo?.trim()) searchParams.set('dateTo', payload.dateTo.trim());
+    const suffix = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const detail = await fetchAuthedJson<CaseDetailResponse>(`${getApiBaseUrl()}/cases/${payload.caseId}${suffix}`, {
+      method: 'GET',
+    });
+    caseCacheStore.set('caseDetails', {
+      ...caseCacheStore.get('caseDetails'),
+      [payload.caseId]: detail,
+    });
+    return detail;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'AUTH_REQUIRED') {
+      return caseCacheStore.get('caseDetails')[payload.caseId] ?? null;
+    }
+    throw error;
+  }
+});
+
+ipcMain.handle('cases:delete', async (_event, caseId: string) => {
+  await fetchAuthedJson<{ ok: true }>(`${getApiBaseUrl()}/cases/${caseId}`, {
+    method: 'DELETE',
+  });
+  caseCacheStore.set('caseList', caseCacheStore.get('caseList').filter((item) => item.id !== caseId));
+  const nextDetails = { ...caseCacheStore.get('caseDetails') };
+  delete nextDetails[caseId];
+  caseCacheStore.set('caseDetails', nextDetails);
+  return { ok: true };
+});
+
+ipcMain.handle('documents:create-upload', async (_event, payload: {
+  caseId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}) => {
+  return await fetchAuthedJson<{ uploadUrl: string; documentId: string; s3Key: string; expiresIn: number }>(
+    `${getApiBaseUrl()}/cases/${payload.caseId}/documents/upload-url`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+});
+
+ipcMain.handle('documents:register', async (_event, payload: {
+  caseId: string;
+  documentId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  s3Key: string;
+}) => {
+  const result = await fetchAuthedJson<{ document: CloudDocumentRecord }>(
+    `${getApiBaseUrl()}/cases/${payload.caseId}/documents`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+  return result.document;
+});
+
+ipcMain.handle('documents:delete', async (_event, payload: { caseId: string; documentId: string }) => {
+  return await fetchAuthedJson<{ ok: true }>(
+    `${getApiBaseUrl()}/cases/${payload.caseId}/documents/${payload.documentId}`,
+    {
+      method: 'DELETE',
+    },
+  );
 });
 
 ipcMain.handle('practice-profile:get', async (_event, plugin: string) => {
@@ -359,6 +590,9 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     body: JSON.stringify({
       message: payload.message,
       skillId: payload.skillId,
+      caseId: payload.caseId,
+      sessionId: payload.sessionId,
+      jurisdiction: payload.jurisdiction,
       plan: 'starter',
     }),
   });
