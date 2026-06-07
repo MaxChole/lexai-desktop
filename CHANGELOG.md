@@ -16,6 +16,7 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- 本地模式发送链路已支持 skill prompt：选中 skill 后，云端与本地模式都会携带 `skillId`，本地模式由 Electron Main 直接解析参考仓库中的 `SKILL.md`
 - 本地模式选择已持久化到桌面端设置，重启后保留云端/本地运行模式
 - 前端发送链路已接入桌面 IPC：云端模式走后端 `/chat`，本地模式直连本地推理接口
 - 前端接入本地推理状态展示与模式切换入口，可在界面查看 embedded/Ollama provider、健康状态与当前云端/本地模式

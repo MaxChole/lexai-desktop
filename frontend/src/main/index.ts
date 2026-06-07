@@ -5,9 +5,11 @@ import {
   LocalInferenceSidecar,
   loadLocalInferenceConfig,
 } from './local-inference-sidecar.js';
+import { LocalSkillEngine } from './local-skill-engine.js';
 
 let mainWindow: BrowserWindow | null = null;
 const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
+const localSkillEngine = new LocalSkillEngine();
 const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
   defaults: {
     runtimeMode: 'cloud',
@@ -16,6 +18,7 @@ const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
 
 interface ChatRequestPayload {
   message: string;
+  skillId?: string;
 }
 
 interface ChatResponsePayload {
@@ -96,6 +99,13 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       throw new Error('Local inference runtime is not configured');
     }
 
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+    if (payload.skillId) {
+      const systemPrompt = await localSkillEngine.buildSystemPrompt(payload.skillId);
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: payload.message });
+
     const response = await fetch(`${localStatus.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -103,7 +113,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       },
       body: JSON.stringify({
         model: localStatus.model,
-        messages: [{ role: 'user', content: payload.message }],
+        messages,
         max_tokens: 4096,
         stream: false,
       }),
@@ -140,6 +150,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     },
     body: JSON.stringify({
       message: payload.message,
+      skillId: payload.skillId,
       plan: 'starter',
     }),
   });

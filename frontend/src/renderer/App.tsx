@@ -56,6 +56,7 @@ function App() {
   const [localStatusLoading, setLocalStatusLoading] = useState(false);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -175,12 +176,16 @@ function App() {
     setSending(true);
     setConversation((current) => [
       ...current,
-      { role: 'user', content: trimmed },
+      {
+        role: 'user',
+        content: trimmed,
+        meta: selectedSkill ? `skill · ${selectedSkill.id}` : undefined,
+      },
     ]);
     setInputText('');
 
     try {
-      const result: DesktopChatResponse = await window.lexai.chat.send(trimmed);
+      const result: DesktopChatResponse = await window.lexai.chat.send(trimmed, selectedSkill?.id);
       setConversation((current) => [
         ...current,
         {
@@ -278,8 +283,17 @@ function App() {
             <div
               key={`${item.type}-${item.id}`}
               className={`px-3 py-2 rounded mb-1 cursor-pointer hover:bg-lexai-bg transition-colors ${
-                item.type === 'agent' ? 'border-l-2 border-lexai-accent' : ''
+                item.type === 'agent'
+                  ? 'border-l-2 border-lexai-accent'
+                  : selectedSkill?.id === item.id
+                    ? 'border border-lexai-primary bg-lexai-primary/10'
+                    : ''
               }`}
+              onClick={() => {
+                if (item.type === 'skill') {
+                  setSelectedSkill(item);
+                }
+              }}
             >
               <div className="flex items-center gap-2">
                 <span className={`text-xs px-1.5 py-0.5 rounded ${
@@ -317,6 +331,15 @@ function App() {
             <span className={`text-xs px-2 py-0.5 rounded ${modePillClass}`}>
               {runtimeMode === 'local' ? '本地模式' : '云端模式'}
             </span>
+            {selectedSkill && (
+              <button
+                onClick={() => setSelectedSkill(null)}
+                className="text-xs px-2 py-0.5 rounded border border-lexai-primary/30 bg-lexai-primary/10 text-lexai-primary"
+                title="点击清除当前 skill"
+              >
+                /{selectedSkill.plugin}:{selectedSkill.name}
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-lexai-border bg-lexai-bg/70 p-1">
             <button

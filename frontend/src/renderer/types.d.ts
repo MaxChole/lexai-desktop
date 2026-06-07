@@ -35,7 +35,7 @@ export interface LexaiBridge {
     set: (mode: 'cloud' | 'local') => Promise<'cloud' | 'local'>;
   };
   chat: {
-    send: (message: string) => Promise<DesktopChatResponse>;
+    send: (message: string, skillId?: string) => Promise<DesktopChatResponse>;
   };
   platform: string;
   onNotification: (callback: (data: unknown) => void) => void;

@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('lexai', {
     set: (mode: 'cloud' | 'local') => ipcRenderer.invoke('runtime-mode:set', mode),
   },
   chat: {
-    send: (message: string) => ipcRenderer.invoke('chat:send', { message }),
+    send: (message: string, skillId?: string) => ipcRenderer.invoke('chat:send', { message, skillId }),
   },
 
   // Platform info
