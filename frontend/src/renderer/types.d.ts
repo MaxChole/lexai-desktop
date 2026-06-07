@@ -114,6 +114,36 @@ export interface CloudSessionRecord {
   updatedAt: string;
 }
 
+export interface AgentUserConfigState {
+  enabled: boolean;
+  cronExpr: string | null;
+  lastRunAt?: string;
+  lastStatus?: 'idle' | 'running' | 'success' | 'error';
+}
+
+export interface ManagedAgentRecord {
+  id: string;
+  name: string;
+  plugin: string;
+  jurisdiction: string;
+  description: string;
+  model: string;
+  tools: string[];
+  defaultCron: string;
+  userConfig: AgentUserConfigState;
+  type: 'agent';
+}
+
+export interface NotificationState {
+  id: string;
+  userId: string;
+  agentId?: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+}
+
 export interface CloudCaseDetail {
   case: CloudCaseSummary;
   documents: CloudDocumentRecord[];
@@ -187,6 +217,30 @@ export interface LexaiBridge {
     createUpload: (payload: { caseId: string; filename: string; mimeType: string; sizeBytes: number }) => Promise<{ uploadUrl: string; documentId: string; s3Key: string; expiresIn: number }>;
     register: (payload: { caseId: string; documentId: string; filename: string; mimeType: string; sizeBytes: number; s3Key: string }) => Promise<CloudDocumentRecord>;
     delete: (payload: { caseId: string; documentId: string }) => Promise<{ ok: true }>;
+  };
+  agents: {
+    list: (jurisdiction?: string) => Promise<ManagedAgentRecord[]>;
+    updateConfig: (payload: { agentId: string; enabled: boolean; cronExpr?: string | null }) => Promise<{ userConfig: AgentUserConfigState }>;
+    run: (agentId: string) => Promise<{
+      run: {
+        runId: string;
+        status: string;
+        finalOutput: string;
+        error?: string;
+        totalUsage: {
+          inputTokens: number;
+          outputTokens: number;
+          cacheReadTokens: number;
+          cacheCreationTokens: number;
+        };
+        finishedAt?: string;
+      };
+    }>;
+  };
+  notifications: {
+    list: () => Promise<NotificationState[]>;
+    markRead: (id: string) => Promise<{ ok: true }>;
+    markAllRead: () => Promise<{ ok: true }>;
   };
   runtimeMode: {
     get: () => Promise<'cloud' | 'local'>;

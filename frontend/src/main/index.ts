@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import fs from 'fs';
 import Store from 'electron-store';
 import path from 'path';
@@ -37,6 +37,12 @@ const caseCacheStore = new Store<{
   defaults: {
     caseList: [],
     caseDetails: {},
+  },
+});
+const notificationStore = new Store<{ shownNotificationIds: string[] }>({
+  name: 'notification-cache',
+  defaults: {
+    shownNotificationIds: [],
   },
 });
 
@@ -135,6 +141,36 @@ interface CaseDetailResponse {
   sessions: CloudSessionRecord[];
 }
 
+interface AgentUserConfigState {
+  enabled: boolean;
+  cronExpr: string | null;
+  lastRunAt?: string;
+  lastStatus?: 'idle' | 'running' | 'success' | 'error';
+}
+
+interface ManagedAgentRecord {
+  id: string;
+  name: string;
+  plugin: string;
+  jurisdiction: string;
+  description: string;
+  model: string;
+  tools: string[];
+  defaultCron: string;
+  userConfig: AgentUserConfigState;
+  type: 'agent';
+}
+
+interface NotificationRecord {
+  id: string;
+  userId: string;
+  agentId?: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+}
+
 function getApiBaseUrl(): string {
   return process.env.VITE_API_BASE_URL || 'http://localhost:3001/v1';
 }
@@ -169,6 +205,29 @@ async function fetchAuthedJson<T>(input: string, init?: RequestInit): Promise<T>
   }
 
   return await response.json() as T;
+}
+
+async function syncDesktopNotifications(): Promise<void> {
+  try {
+    const payload = await fetchAuthedJson<{ notifications: NotificationRecord[] }>(`${getApiBaseUrl()}/notifications`, {
+      method: 'GET',
+    });
+    const shownIds = new Set(notificationStore.get('shownNotificationIds'));
+    for (const item of payload.notifications) {
+      if (item.read || shownIds.has(item.id)) continue;
+      if (Notification.isSupported()) {
+        new Notification({
+          title: item.title,
+          body: item.body,
+        }).show();
+      }
+      mainWindow?.webContents.send('notification:new', item);
+      shownIds.add(item.id);
+    }
+    notificationStore.set('shownNotificationIds', Array.from(shownIds).slice(-200));
+  } catch {
+    // no-op when user is not logged in or backend unavailable
+  }
 }
 
 function createWindow() {
@@ -277,6 +336,64 @@ ipcMain.handle('usage:get-current', async (): Promise<UsageCurrentResponse | nul
     }
     throw error;
   }
+});
+
+ipcMain.handle('agents:list', async (_event, jurisdiction?: string): Promise<ManagedAgentRecord[]> => {
+  const suffix = jurisdiction ? `?jurisdiction=${encodeURIComponent(jurisdiction)}` : '';
+  const payload = await fetchAuthedJson<{ agents: ManagedAgentRecord[] }>(`${getApiBaseUrl()}/agents${suffix}`, {
+    method: 'GET',
+  });
+  return payload.agents;
+});
+
+ipcMain.handle('agents:update-config', async (_event, payload: {
+  agentId: string;
+  enabled: boolean;
+  cronExpr?: string | null;
+}) => {
+  return await fetchAuthedJson<{ userConfig: AgentUserConfigState }>(`${getApiBaseUrl()}/agents/${payload.agentId}/config`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+});
+
+ipcMain.handle('agents:run', async (_event, agentId: string) => {
+  return await fetchAuthedJson<{
+    run: {
+      runId: string;
+      status: string;
+      finalOutput: string;
+      error?: string;
+      totalUsage: {
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+      };
+      finishedAt?: string;
+    };
+  }>(`${getApiBaseUrl()}/agents/${agentId}/run`, {
+    method: 'POST',
+  });
+});
+
+ipcMain.handle('notifications:list', async () => {
+  const payload = await fetchAuthedJson<{ notifications: NotificationRecord[] }>(`${getApiBaseUrl()}/notifications`, {
+    method: 'GET',
+  });
+  return payload.notifications;
+});
+
+ipcMain.handle('notifications:mark-read', async (_event, id: string) => {
+  return await fetchAuthedJson<{ ok: true }>(`${getApiBaseUrl()}/notifications/${id}/read`, {
+    method: 'PATCH',
+  });
+});
+
+ipcMain.handle('notifications:mark-all-read', async () => {
+  return await fetchAuthedJson<{ ok: true }>(`${getApiBaseUrl()}/notifications/read-all`, {
+    method: 'PATCH',
+  });
 });
 
 ipcMain.handle('cases:list', async (_event, filters: { q?: string; jurisdiction?: string } = {}) => {
@@ -608,6 +725,10 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
 app.whenReady().then(async () => {
   await localInferenceSidecar.start();
   createWindow();
+  void syncDesktopNotifications();
+  setInterval(() => {
+    void syncDesktopNotifications();
+  }, 15000);
 });
 
 app.on('window-all-closed', () => {

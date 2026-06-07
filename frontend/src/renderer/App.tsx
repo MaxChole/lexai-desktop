@@ -7,6 +7,8 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-typescript';
 import type {
+  ManagedAgentRecord,
+  NotificationState,
   AuthenticatedUser,
   CloudCaseDetail,
   CloudCaseSummary,
@@ -203,6 +205,11 @@ function App() {
   const [caseLoading, setCaseLoading] = useState(false);
   const [caseDetailLoading, setCaseDetailLoading] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
+  const [managedAgents, setManagedAgents] = useState<ManagedAgentRecord[]>([]);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentMessage, setAgentMessage] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationState[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -262,6 +269,32 @@ function App() {
     } catch (error) {
       console.error('Current user error:', error);
       setCurrentUser(null);
+    }
+  }
+
+  async function loadManagedAgents() {
+    if (runtimeMode !== 'cloud') return;
+    setAgentLoading(true);
+    try {
+      setManagedAgents(await window.lexai.agents.list(jurisdiction === 'ALL' ? undefined : jurisdiction));
+    } catch (error) {
+      setAgentMessage(error instanceof Error ? error.message : String(error));
+      setManagedAgents([]);
+    } finally {
+      setAgentLoading(false);
+    }
+  }
+
+  async function loadNotifications() {
+    if (runtimeMode !== 'cloud') return;
+    setNotificationLoading(true);
+    try {
+      setNotifications(await window.lexai.notifications.list());
+    } catch (error) {
+      console.error('Notification list error:', error);
+      setNotifications([]);
+    } finally {
+      setNotificationLoading(false);
     }
   }
 
@@ -359,6 +392,8 @@ function App() {
   useEffect(() => {
     if (runtimeMode === 'cloud') {
       void loadCloudCases();
+      void loadManagedAgents();
+      void loadNotifications();
     }
   }, [runtimeMode, jurisdiction]);
 
@@ -370,6 +405,12 @@ function App() {
       setCloudSessionId(null);
     }
   }, [runtimeMode, selectedCaseId, sessionSearch, sessionSkillFilter, sessionDateFrom, sessionDateTo]);
+
+  useEffect(() => {
+    window.lexai.onNotification(() => {
+      void loadNotifications();
+    });
+  }, []);
 
   useEffect(() => {
     if (!selectedSkill) {
@@ -688,6 +729,43 @@ function App() {
     }
   }
 
+  async function handleToggleAgent(agent: ManagedAgentRecord) {
+    setAgentMessage(null);
+    try {
+      await window.lexai.agents.updateConfig({
+        agentId: agent.id,
+        enabled: !agent.userConfig.enabled,
+        cronExpr: agent.userConfig.cronExpr,
+      });
+      await loadManagedAgents();
+    } catch (error) {
+      setAgentMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleRunAgent(agentId: string) {
+    setAgentMessage(null);
+    try {
+      const result = await window.lexai.agents.run(agentId);
+      setAgentMessage(result.run.status === 'success'
+        ? 'Agent 已执行完成，结果已写入通知中心'
+        : `Agent 执行失败：${result.run.error || 'unknown error'}`);
+      await Promise.all([loadManagedAgents(), loadNotifications()]);
+    } catch (error) {
+      setAgentMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleMarkNotificationRead(id: string) {
+    await window.lexai.notifications.markRead(id);
+    await loadNotifications();
+  }
+
+  async function handleMarkAllNotificationsRead() {
+    await window.lexai.notifications.markAllRead();
+    await loadNotifications();
+  }
+
   function openCloudSession(sessionId: string) {
     const session = selectedCaseDetail?.sessions.find((item) => item.id === sessionId);
     if (!session) return;
@@ -882,6 +960,7 @@ function App() {
                 </button>
               </div>
               {caseMessage && <div className="mt-2 text-[11px] text-lexai-muted">{caseMessage}</div>}
+              {agentMessage && <div className="mt-2 text-[11px] text-lexai-muted">{agentMessage}</div>}
               <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
                 {caseLoading ? (
                   <div className="text-[11px] text-lexai-muted">加载案件中...</div>
@@ -937,6 +1016,46 @@ function App() {
         </div>
 
         <div className="border-t border-lexai-border px-4 py-3">
+          {runtimeMode === 'cloud' && (
+            <>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs text-lexai-muted">Agent 面板</div>
+                <button onClick={() => void loadManagedAgents()} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">刷新</button>
+              </div>
+              <div className="mb-4 max-h-56 space-y-2 overflow-y-auto">
+                {agentLoading ? (
+                  <div className="text-[11px] text-lexai-muted">加载 Agent 中...</div>
+                ) : managedAgents.length === 0 ? (
+                  <div className="text-[11px] leading-5 text-lexai-muted">已登录后可启用定时 Agent，并手动触发执行。</div>
+                ) : (
+                  managedAgents.map((agent) => (
+                    <div key={agent.id} className="rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium text-lexai-text">{agent.name}</div>
+                          <div className="mt-1 text-[11px] text-lexai-muted">
+                            {agent.userConfig.cronExpr || agent.defaultCron} · {agent.userConfig.lastStatus || 'idle'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => void handleToggleAgent(agent)}
+                          className={`rounded-full px-2 py-1 text-[11px] ${agent.userConfig.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}
+                        >
+                          {agent.userConfig.enabled ? '已启用' : '已暂停'}
+                        </button>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-lexai-muted">{agent.description}</p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="truncate text-[11px] text-lexai-muted">{agent.plugin}</div>
+                        <button onClick={() => void handleRunAgent(agent.id)} className="text-[11px] text-sky-300 hover:text-sky-200">立即执行</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+
           <div className="mb-3 flex items-center justify-between">
             <div className="text-xs text-lexai-muted">本地会话</div>
             <button onClick={handleNewConversation} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">新建</button>
@@ -1092,6 +1211,43 @@ function App() {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {runtimeMode === 'cloud' && (
+            <div className="mx-auto mb-4 w-full max-w-5xl rounded-3xl border border-lexai-border bg-lexai-surface p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-xs text-lexai-muted">消息中心</div>
+                  <div className="mt-1 text-sm font-medium text-lexai-text">Agent 执行结果与桌面通知</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => void loadNotifications()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
+                  <button onClick={() => void handleMarkAllNotificationsRead()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">全部已读</button>
+                </div>
+              </div>
+              <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+                {notificationLoading ? (
+                  <div className="text-sm text-lexai-muted">加载通知中...</div>
+                ) : notifications.length === 0 ? (
+                  <div className="text-sm text-lexai-muted">暂无通知。手动运行或等待定时 Agent 执行后，这里会出现结果摘要。</div>
+                ) : (
+                  notifications.map((item) => (
+                    <div key={item.id} className={`rounded-2xl border px-3 py-3 ${item.read ? 'border-lexai-border bg-lexai-bg/50' : 'border-amber-400/30 bg-amber-400/10'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-lexai-text">{item.title}</div>
+                          <div className="mt-1 whitespace-pre-wrap text-xs leading-6 text-lexai-muted">{item.body}</div>
+                        </div>
+                        {!item.read && (
+                          <button onClick={() => void handleMarkNotificationRead(item.id)} className="text-[11px] text-sky-300 hover:text-sky-200">标记已读</button>
+                        )}
+                      </div>
+                      <div className="mt-2 text-[11px] text-lexai-muted">{formatUpdatedAt(item.createdAt)}{item.agentId ? ` · ${item.agentId}` : ''}</div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

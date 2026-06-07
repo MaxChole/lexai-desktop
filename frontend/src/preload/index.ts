@@ -25,6 +25,16 @@ contextBridge.exposeInMainWorld('lexai', {
   usage: {
     getCurrent: () => ipcRenderer.invoke('usage:get-current'),
   },
+  agents: {
+    list: (jurisdiction?: string) => ipcRenderer.invoke('agents:list', jurisdiction),
+    updateConfig: (payload: { agentId: string; enabled: boolean; cronExpr?: string | null }) => ipcRenderer.invoke('agents:update-config', payload),
+    run: (agentId: string) => ipcRenderer.invoke('agents:run', agentId),
+  },
+  notifications: {
+    list: () => ipcRenderer.invoke('notifications:list'),
+    markRead: (id: string) => ipcRenderer.invoke('notifications:mark-read', id),
+    markAllRead: () => ipcRenderer.invoke('notifications:mark-all-read'),
+  },
   cases: {
     list: (filters?: { q?: string; jurisdiction?: string }) => ipcRenderer.invoke('cases:list', filters),
     create: (payload: { title: string; description?: string; tags?: string[]; jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL' }) => ipcRenderer.invoke('cases:create', payload),
