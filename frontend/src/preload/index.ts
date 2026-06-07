@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld('lexai', {
   localInference: {
     status: () => ipcRenderer.invoke('local-inference:status'),
   },
+  localModel: {
+    getStatus: () => ipcRenderer.invoke('local-model:get-status'),
+    startDownload: () => ipcRenderer.invoke('local-model:start-download'),
+    pauseDownload: () => ipcRenderer.invoke('local-model:pause-download'),
+    delete: () => ipcRenderer.invoke('local-model:delete'),
+  },
   runtimeMode: {
     get: () => ipcRenderer.invoke('runtime-mode:get'),
     set: (mode: 'cloud' | 'local') => ipcRenderer.invoke('runtime-mode:set', mode),

@@ -9,14 +9,17 @@ import {
 } from './local-inference-sidecar.js';
 import { LocalChatStore } from './local-chat-store.js';
 import { LocalDocumentStore } from './local-document-store.js';
+import { LocalModelManager } from './local-model-manager.js';
 import { LocalSkillEngine } from './local-skill-engine.js';
 
 let mainWindow: BrowserWindow | null = null;
 const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
 const localProfilesDir = path.join(app.getPath('userData'), 'practice-profiles');
 const localDocumentsDir = path.join(app.getPath('userData'), 'local-documents');
+const localModelsDir = path.join(app.getPath('userData'), 'local-models');
 const localChatStore = new LocalChatStore();
 const localDocumentStore = new LocalDocumentStore(localDocumentsDir);
+const localModelManager = new LocalModelManager(localModelsDir, process.env.LOCAL_LLM_MODEL_URL);
 const localSkillEngine = new LocalSkillEngine(localProfilesDir);
 const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
   defaults: {
@@ -89,6 +92,22 @@ ipcMain.handle('api:health', async () => {
 
 ipcMain.handle('local-inference:status', async () => {
   return localInferenceSidecar.getStatus();
+});
+
+ipcMain.handle('local-model:get-status', async () => {
+  return localModelManager.getStatus();
+});
+
+ipcMain.handle('local-model:start-download', async () => {
+  return localModelManager.startDownload();
+});
+
+ipcMain.handle('local-model:pause-download', async () => {
+  return localModelManager.pauseDownload();
+});
+
+ipcMain.handle('local-model:delete', async () => {
+  return localModelManager.deleteModel();
 });
 
 ipcMain.handle('runtime-mode:get', async () => {

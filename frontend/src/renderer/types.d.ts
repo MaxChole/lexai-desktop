@@ -13,6 +13,23 @@ export interface LocalInferenceStatus {
   lastError?: string;
 }
 
+export interface ManagedLocalModelStatus {
+  id: string;
+  name: string;
+  provider: 'embedded';
+  fileName: string;
+  sizeBytes: number;
+  recommendedRamGb: number;
+  state: 'not_installed' | 'downloading' | 'paused' | 'installed';
+  downloadedBytes: number;
+  speedBytesPerSecond?: number;
+  etaSeconds?: number;
+  filePath?: string;
+  sourceUrl?: string;
+  warning?: string;
+  lastError?: string;
+}
+
 export interface DesktopChatResponse {
   content: string;
   model: string;
@@ -64,6 +81,12 @@ export interface LexaiBridge {
   api: LexaiAPI;
   localInference: {
     status: () => Promise<LocalInferenceStatus>;
+  };
+  localModel: {
+    getStatus: () => Promise<ManagedLocalModelStatus>;
+    startDownload: () => Promise<ManagedLocalModelStatus>;
+    pauseDownload: () => Promise<ManagedLocalModelStatus>;
+    delete: () => Promise<ManagedLocalModelStatus>;
   };
   runtimeMode: {
     get: () => Promise<'cloud' | 'local'>;

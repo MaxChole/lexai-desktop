@@ -5,6 +5,7 @@ import type {
   LocalConversationRecord,
   LocalConversationSummary,
   LocalInferenceStatus,
+  ManagedLocalModelStatus,
 } from './types';
 
 interface SkillItem {
@@ -50,6 +51,17 @@ const defaultLocalInferenceStatus: LocalInferenceStatus = {
   healthy: false,
 };
 
+const defaultLocalModelStatus: ManagedLocalModelStatus = {
+  id: 'qwen2.5-7b-instruct-q4_k_m',
+  name: 'Qwen2.5-7B-Instruct-Q4_K_M',
+  provider: 'embedded',
+  fileName: 'Qwen2.5-7B-Instruct-Q4_K_M.gguf',
+  sizeBytes: 5 * 1024 * 1024 * 1024,
+  recommendedRamGb: 16,
+  state: 'not_installed',
+  downloadedBytes: 0,
+};
+
 function App() {
   const [jurisdiction, setJurisdiction] = useState<Jurisdiction>('CN');
   const [skills, setSkills] = useState<SkillItem[]>([]);
@@ -59,7 +71,9 @@ function App() {
   const [inputText, setInputText] = useState('');
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('cloud');
   const [localInference, setLocalInference] = useState<LocalInferenceStatus>(defaultLocalInferenceStatus);
+  const [localModel, setLocalModel] = useState<ManagedLocalModelStatus>(defaultLocalModelStatus);
   const [localStatusLoading, setLocalStatusLoading] = useState(false);
+  const [localModelLoading, setLocalModelLoading] = useState(false);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
@@ -91,6 +105,22 @@ function App() {
       setRuntimeMode('cloud');
     } finally {
       setLocalStatusLoading(false);
+    }
+  }
+
+  async function loadLocalModelStatus() {
+    setLocalModelLoading(true);
+    try {
+      const status = await window.lexai.localModel.getStatus();
+      setLocalModel(status);
+    } catch (error) {
+      console.error('Local model status error:', error);
+      setLocalModel({
+        ...defaultLocalModelStatus,
+        lastError: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setLocalModelLoading(false);
     }
   }
 
@@ -151,12 +181,14 @@ function App() {
 
   useEffect(() => {
     void loadLocalInferenceStatus();
+    void loadLocalModelStatus();
     void loadLocalConversations();
     void window.lexai.runtimeMode.get().then((mode) => {
       setRuntimeMode(mode);
     });
     const intervalId = window.setInterval(() => {
       void loadLocalInferenceStatus();
+      void loadLocalModelStatus();
     }, 15000);
 
     return () => window.clearInterval(intervalId);
@@ -216,11 +248,29 @@ function App() {
       : localInference.enabled
         ? '未连接'
         : '未启用';
+  const localModelProgress = localModel.sizeBytes > 0
+    ? Math.min((localModel.downloadedBytes / localModel.sizeBytes) * 100, 100)
+    : 0;
 
   async function handleRuntimeModeChange(nextMode: RuntimeMode) {
-    if (nextMode === 'local' && !localReady) return;
+    if (nextMode === 'local' && (!localReady || localModel.state !== 'installed')) return;
     const savedMode = await window.lexai.runtimeMode.set(nextMode);
     setRuntimeMode(savedMode);
+  }
+
+  async function handleLocalModelDownload() {
+    const status = localModel.state === 'downloading'
+      ? await window.lexai.localModel.pauseDownload()
+      : await window.lexai.localModel.startDownload();
+    setLocalModel(status);
+  }
+
+  async function handleDeleteLocalModel() {
+    const status = await window.lexai.localModel.delete();
+    setLocalModel(status);
+    if (runtimeMode === 'local') {
+      await handleRuntimeModeChange('cloud');
+    }
   }
 
   async function handleSend() {
@@ -302,6 +352,14 @@ function App() {
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  function formatEta(seconds?: number): string | null {
+    if (!seconds || seconds <= 0) return null;
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${minutes}m ${remainder}s`;
+  }
+
   async function handleAttachDocuments() {
     setAttachingDocuments(true);
     try {
@@ -373,6 +431,93 @@ function App() {
             {localInference.lastError && (
               <p className="mt-2 text-[11px] leading-5 text-rose-300">
                 {localInference.lastError}
+              </p>
+            )}
+          </div>
+          <div className="mt-3 rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs text-lexai-muted">本地模型</div>
+                <div className="mt-1 text-sm font-medium text-lexai-text">
+                  {localModel.name}
+                </div>
+              </div>
+              <button
+                onClick={() => void loadLocalModelStatus()}
+                className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text"
+              >
+                刷新
+              </button>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-[11px] text-lexai-muted">
+                <span>
+                  {localModel.state === 'installed'
+                    ? '已安装'
+                    : localModel.state === 'downloading'
+                      ? '下载中'
+                      : localModel.state === 'paused'
+                        ? '已暂停'
+                        : '未安装'}
+                </span>
+                <span>
+                  {formatFileSize(localModel.downloadedBytes)} / {formatFileSize(localModel.sizeBytes)}
+                </span>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-lexai-surface">
+                <div
+                  className="h-2 rounded-full bg-emerald-400 transition-all"
+                  style={{ width: `${localModelProgress}%` }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-lexai-muted">
+                  {localModel.state === 'downloading' && localModel.speedBytesPerSecond
+                    ? `${formatFileSize(localModel.speedBytesPerSecond)}/s${formatEta(localModel.etaSeconds) ? ` · 剩余 ${formatEta(localModel.etaSeconds)}` : ''}`
+                    : `约 ${Math.round(localModel.sizeBytes / 1024 / 1024 / 1024)} GB`}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => void handleLocalModelDownload()}
+                    disabled={localModelLoading || (!localModel.sourceUrl && localModel.state === 'not_installed')}
+                    className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
+                      localModelLoading || (!localModel.sourceUrl && localModel.state === 'not_installed')
+                        ? 'bg-lexai-primary/40 text-white/70 cursor-not-allowed'
+                        : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
+                    }`}
+                  >
+                    {localModel.state === 'downloading'
+                      ? '暂停'
+                      : localModel.state === 'paused'
+                        ? '继续'
+                        : localModel.state === 'installed'
+                          ? '已安装'
+                          : '下载'}
+                  </button>
+                  {localModel.state !== 'not_installed' && (
+                    <button
+                      onClick={() => void handleDeleteLocalModel()}
+                      className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200"
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            {localModel.warning && (
+              <p className="mt-2 text-[11px] leading-5 text-amber-300">
+                {localModel.warning}
+              </p>
+            )}
+            {localModel.lastError && (
+              <p className="mt-2 text-[11px] leading-5 text-rose-300">
+                {localModel.lastError}
+              </p>
+            )}
+            {!localModel.sourceUrl && (
+              <p className="mt-2 text-[11px] leading-5 text-lexai-muted">
+                当前未配置下载源。设置 `LOCAL_LLM_MODEL_URL` 后即可下载内嵌模型。
               </p>
             )}
           </div>
@@ -581,7 +726,7 @@ function App() {
               className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
                 runtimeMode === 'local'
                   ? 'bg-emerald-500/20 text-emerald-300'
-                  : localReady
+                  : localReady && localModel.state === 'installed'
                     ? 'text-lexai-muted hover:text-lexai-text'
                     : 'text-lexai-muted/50 cursor-not-allowed'
               }`}
