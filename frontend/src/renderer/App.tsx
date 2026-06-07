@@ -57,6 +57,10 @@ function App() {
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
+  const [practiceProfileDraft, setPracticeProfileDraft] = useState('');
+  const [practiceProfileLoading, setPracticeProfileLoading] = useState(false);
+  const [practiceProfileSaving, setPracticeProfileSaving] = useState(false);
+  const [practiceProfileMessage, setPracticeProfileMessage] = useState<string | null>(null);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -128,6 +132,27 @@ function App() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!selectedSkill) {
+      setPracticeProfileDraft('');
+      setPracticeProfileMessage(null);
+      return;
+    }
+
+    setPracticeProfileLoading(true);
+    setPracticeProfileMessage(null);
+    void window.lexai.practiceProfile.get(selectedSkill.plugin)
+      .then((content) => {
+        setPracticeProfileDraft(content);
+      })
+      .catch((error) => {
+        setPracticeProfileMessage(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        setPracticeProfileLoading(false);
+      });
+  }, [selectedSkill]);
 
   // Combine skills and agents into unified catalog
   const catalog: CatalogItem[] = [
@@ -205,6 +230,21 @@ function App() {
       ]);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleSavePracticeProfile() {
+    if (!selectedSkill) return;
+
+    setPracticeProfileSaving(true);
+    setPracticeProfileMessage(null);
+    try {
+      await window.lexai.practiceProfile.set(selectedSkill.plugin, practiceProfileDraft);
+      setPracticeProfileMessage('本地 practice profile 已保存');
+    } catch (error) {
+      setPracticeProfileMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPracticeProfileSaving(false);
     }
   }
 
@@ -312,6 +352,46 @@ function App() {
               </p>
             </div>
           ))}
+        </div>
+
+        <div className="border-t border-lexai-border px-4 py-3">
+          <div className="text-xs text-lexai-muted mb-2">本地 Profile</div>
+          {selectedSkill ? (
+            <div className="rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
+              <div className="text-xs text-lexai-muted">
+                {selectedSkill.plugin}
+              </div>
+              <textarea
+                value={practiceProfileDraft}
+                onChange={(e) => setPracticeProfileDraft(e.target.value)}
+                placeholder="为当前插件保存本地 practice profile。为空时将回退到 references 中的 CLAUDE.md 模板。"
+                className="mt-2 h-32 w-full resize-none rounded-lg border border-lexai-border bg-lexai-surface px-3 py-2 text-xs leading-5 text-lexai-text placeholder-lexai-muted focus:outline-none focus:border-lexai-primary"
+              />
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-lexai-muted">
+                  {practiceProfileLoading ? '加载中...' : '本地模式优先使用这里的内容'}
+                </div>
+                <button
+                  onClick={() => void handleSavePracticeProfile()}
+                  disabled={practiceProfileSaving || practiceProfileLoading}
+                  className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
+                    practiceProfileSaving || practiceProfileLoading
+                      ? 'bg-lexai-primary/40 text-white/70 cursor-not-allowed'
+                      : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
+                  }`}
+                >
+                  {practiceProfileSaving ? '保存中...' : '保存'}
+                </button>
+              </div>
+              {practiceProfileMessage && (
+                <div className="mt-2 text-[11px] text-lexai-muted">{practiceProfileMessage}</div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11px] leading-5 text-lexai-muted">
+              先在上方选择一个 Skill，再为对应插件编辑本地 practice profile。
+            </div>
+          )}
         </div>
 
         <div className="p-4 text-xs text-lexai-muted border-t border-lexai-border">

@@ -34,6 +34,10 @@ export interface LexaiBridge {
     get: () => Promise<'cloud' | 'local'>;
     set: (mode: 'cloud' | 'local') => Promise<'cloud' | 'local'>;
   };
+  practiceProfile: {
+    get: (plugin: string) => Promise<string>;
+    set: (plugin: string, content: string) => Promise<{ ok: true }>;
+  };
   chat: {
     send: (message: string, skillId?: string) => Promise<DesktopChatResponse>;
   };

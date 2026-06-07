@@ -75,6 +75,16 @@ async function walkDir(dir: string, targetName: string): Promise<string[]> {
 export class LocalSkillEngine {
   private promptCache = new Map<string, string>();
 
+  constructor(private readonly profileRootDir?: string) {}
+
+  invalidatePrompt(skillId?: string): void {
+    if (skillId) {
+      this.promptCache.delete(skillId);
+      return;
+    }
+    this.promptCache.clear();
+  }
+
   async buildSystemPrompt(skillId: string): Promise<string> {
     const cached = this.promptCache.get(skillId);
     if (cached) return cached;
@@ -104,6 +114,21 @@ export class LocalSkillEngine {
   }
 
   private async loadPracticeProfile(repoRoot: string, plugin: string): Promise<string | undefined> {
+    const localProfilePath = this.profileRootDir
+      ? path.join(this.profileRootDir, `${plugin}.md`)
+      : undefined;
+
+    if (localProfilePath) {
+      try {
+        const raw = await fs.readFile(localProfilePath, 'utf-8');
+        if (raw.trim()) {
+          return raw.trim();
+        }
+      } catch {
+        // Fall through to the repository template.
+      }
+    }
+
     const practiceProfilePath = path.join(repoRoot, plugin, 'CLAUDE.md');
 
     try {
@@ -112,5 +137,27 @@ export class LocalSkillEngine {
     } catch {
       return undefined;
     }
+  }
+
+  async readLocalPracticeProfile(plugin: string): Promise<string> {
+    if (!this.profileRootDir) return '';
+
+    const filePath = path.join(this.profileRootDir, `${plugin}.md`);
+    try {
+      return await fs.readFile(filePath, 'utf-8');
+    } catch {
+      return '';
+    }
+  }
+
+  async saveLocalPracticeProfile(plugin: string, content: string): Promise<void> {
+    if (!this.profileRootDir) {
+      throw new Error('Local profile directory is not configured');
+    }
+
+    await fs.mkdir(this.profileRootDir, { recursive: true });
+    const filePath = path.join(this.profileRootDir, `${plugin}.md`);
+    await fs.writeFile(filePath, content, 'utf-8');
+    this.invalidatePrompt();
   }
 }

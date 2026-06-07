@@ -9,7 +9,8 @@ import { LocalSkillEngine } from './local-skill-engine.js';
 
 let mainWindow: BrowserWindow | null = null;
 const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
-const localSkillEngine = new LocalSkillEngine();
+const localProfilesDir = path.join(app.getPath('userData'), 'practice-profiles');
+const localSkillEngine = new LocalSkillEngine(localProfilesDir);
 const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
   defaults: {
     runtimeMode: 'cloud',
@@ -88,6 +89,15 @@ ipcMain.handle('runtime-mode:get', async () => {
 ipcMain.handle('runtime-mode:set', async (_event, mode: 'cloud' | 'local') => {
   settingsStore.set('runtimeMode', mode);
   return settingsStore.get('runtimeMode');
+});
+
+ipcMain.handle('practice-profile:get', async (_event, plugin: string) => {
+  return localSkillEngine.readLocalPracticeProfile(plugin);
+});
+
+ipcMain.handle('practice-profile:set', async (_event, payload: { plugin: string; content: string }) => {
+  await localSkillEngine.saveLocalPracticeProfile(payload.plugin, payload.content);
+  return { ok: true };
 });
 
 ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise<ChatResponsePayload> => {
