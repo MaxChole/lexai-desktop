@@ -1,7 +1,12 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import {
+  LocalInferenceSidecar,
+  loadLocalInferenceConfig,
+} from './local-inference-sidecar.js';
 
 let mainWindow: BrowserWindow | null = null;
+const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -43,12 +48,23 @@ ipcMain.handle('api:health', async () => {
   }
 });
 
-app.whenReady().then(createWindow);
+ipcMain.handle('local-inference:status', async () => {
+  return localInferenceSidecar.getStatus();
+});
+
+app.whenReady().then(async () => {
+  await localInferenceSidecar.start();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', async () => {
+  await localInferenceSidecar.stop();
 });
 
 app.on('activate', () => {

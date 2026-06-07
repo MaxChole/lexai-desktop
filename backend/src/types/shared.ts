@@ -70,6 +70,8 @@ export interface TokenUsage {
 
 export type Plan = 'starter' | 'professional' | 'enterprise';
 
+export type ModelProvider = 'anthropic' | 'deepseek' | 'kimi' | 'local-embedded' | 'local-ollama';
+
 export interface User {
   id: string;
   email: string;
@@ -79,6 +81,13 @@ export interface User {
   orgId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LocalModelConfig {
+  provider: 'embedded' | 'ollama';
+  model: string;
+  baseUrl: string;
+  enabled: boolean;
 }
 
 export interface ApiError {

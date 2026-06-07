@@ -16,6 +16,10 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- 将 T-11 和 PRD 的本地模式方案从“Ollama 唯一方案”调整为“embedded sidecar 优先，兼容 Ollama”
+- 接入本地推理引擎 sidecar 骨架：Electron Main 负责启动、停止和健康检查本地 runtime
+- ModelRouter 增加本地 provider 路由能力，支持 `embedded:` / `ollama:` 模型前缀和本地 OpenAI-compatible 接口
+- `.env.example` 补充本地推理 sidecar 与 Ollama 兼容模式所需环境变量
 - 修复本地开发环境依赖安装，恢复前后端 `npm run build` / `npm run typecheck` 可用
 - 初始化并同步 `references/` 子模块，确保 Skill/Agent 索引基于真实参考仓库内容
 - 后端统一改为自动解析 `references/` 绝对路径，避免不同启动目录下索引失败

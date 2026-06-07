@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld('lexai', {
   api: {
     health: () => ipcRenderer.invoke('api:health'),
   },
+  localInference: {
+    status: () => ipcRenderer.invoke('local-inference:status'),
+  },
 
   // Platform info
   platform: process.platform,

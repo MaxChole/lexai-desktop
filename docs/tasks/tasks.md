@@ -30,7 +30,7 @@ _无_
 | T-07 | 案件与文档管理：案件库 + 文档上传 + 会话历史搜索 | T-04, T-05 | pending |
 | T-08 | 定时 Agent 面板：后台任务调度 + 桌面通知 | T-03, T-05 | pending |
 | T-09 | 用量追踪与配额管理：Token 计量 + 超限控制 | T-03, T-04 | pending |
-| T-11 | 本地模型引擎：Ollama sidecar + Qwen2.5-7B 下载管理 + 本地模式切换 | T-01, T-05 | pending |
+| T-11 | 本地模型引擎：本地推理引擎 sidecar（embedded 优先，兼容 Ollama）+ Qwen2.5-7B 下载管理 + 本地模式切换 | T-01, T-05 | pending |
 
 ### 阶段 3 — 发布
 
@@ -183,17 +183,19 @@ _无_
 
 ### T-11 — 本地模型引擎
 
-**目标:** 集成 Ollama sidecar，实现 Qwen2.5-7B 下载管理和本地模式切换
+**目标:** 集成本地推理引擎 sidecar，实现 Qwen2.5-7B 下载管理和本地模式切换
 
 **包含:**
-- Electron 启动时自动检测并拉起 Ollama 进程（sidecar），退出时关闭
+- Electron 启动时自动检测并拉起本地推理引擎进程（sidecar），退出时关闭
+- 默认方案为应用内嵌 runtime（embedded inference engine），不要求用户预装 Ollama
+- 若系统已安装 Ollama，可作为兼容 provider 接入，但不是功能前提
 - 模型管理 UI（设置页）：
   - 显示 Qwen2.5-7B-Instruct-Q4_K_M（~5GB）及其状态（未安装/下载中/已安装）
   - 下载进度条（实时速度、剩余时间、暂停/恢复）
   - 硬件检测：RAM < 16GB 时显示黄色警告
   - 已安装后显示"删除"按钮
 - 顶部工具栏模式切换：云端模式 ↔ 本地模式（Qwen2.5-7B）
-- 本地模式下 ModelRouter 路由到 Ollama REST API（`http://localhost:11434`）
+- 本地模式下 ModelRouter 路由到本地推理引擎统一接口；embedded runtime 为默认 provider，Ollama 为兼容 provider
 - 本地模式下数据存 SQLite（`userData/local.db`）+ 本地文件系统，不走后端
 - Verify in browser using dev-browser skill
 
