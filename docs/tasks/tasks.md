@@ -29,7 +29,7 @@ _无_
 | T-06 | 跨体系融合 Skills：6 个中美双体系对比 Skill | T-02, T-03 | pending |
 | T-07 | 案件与文档管理：案件库 + 文档上传 + 会话历史搜索 | T-04, T-05 | pending |
 | T-08 | 定时 Agent 面板：后台任务调度 + 桌面通知 | T-03, T-05 | pending |
-| T-09 | 用量追踪与配额管理：Token 计量 + 超限控制 | T-03, T-04 | pending |
+| T-09 | 用量追踪与配额管理：Token 计量 + 超限控制 | T-03, T-04 | done |
 | T-11 | 本地模型引擎：本地推理引擎 sidecar（embedded 优先，兼容 Ollama）+ Qwen2.5-7B 下载管理 + 本地模式切换 | T-01, T-05 | done |
 
 ### 阶段 3 — 发布

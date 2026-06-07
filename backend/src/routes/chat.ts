@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { SkillRegistry, SkillEngine } from '../services/skill-engine/index.js';
 import { ModelRouter } from '../services/model-router/index.js';
 import { resolveReferencesDir } from '../services/reference-path.js';
+import { getAuthenticatedUserFromToken, readBearerToken } from '../services/auth.js';
+import { recordTokenUsage } from '../services/usage.js';
 import type { Jurisdiction, Plan } from '../types/shared.js';
 
 let registry: SkillRegistry | null = null;
@@ -41,6 +43,11 @@ export default async function chatRoutes(app: FastifyInstance) {
       systemPrompt = engine!.buildSystemPrompt(skillId);
     }
 
+    const token = readBearerToken(request.headers.authorization);
+    const authenticated = token
+      ? await getAuthenticatedUserFromToken(token).catch(() => null)
+      : null;
+
     // Call model
     const result = await modelRouter.call(
       {
@@ -50,6 +57,17 @@ export default async function chatRoutes(app: FastifyInstance) {
       },
       plan || 'starter',
     );
+
+    if (authenticated?.appUser) {
+      await recordTokenUsage({
+        userId: authenticated.appUser.id,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        cacheReadTokens: result.cacheReadTokens,
+        cacheCreationTokens: result.cacheCreationTokens,
+      });
+    }
 
     return {
       content: result.content,

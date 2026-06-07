@@ -13,6 +13,7 @@ import type {
   LocalConversationSummary,
   LocalInferenceStatus,
   ManagedLocalModelStatus,
+  UsageCurrentState,
 } from './types';
 
 interface SkillItem {
@@ -175,6 +176,7 @@ function App() {
   const [practiceProfileSaving, setPracticeProfileSaving] = useState(false);
   const [practiceProfileMessage, setPracticeProfileMessage] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [usageSummary, setUsageSummary] = useState<UsageCurrentState | null>(null);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -219,6 +221,15 @@ function App() {
     }
   }
 
+  async function loadUsageSummary() {
+    try {
+      setUsageSummary(await window.lexai.usage.getCurrent());
+    } catch (error) {
+      console.error('Usage summary error:', error);
+      setUsageSummary(null);
+    }
+  }
+
   async function openLocalConversation(conversationId: string) {
     const storedConversation = await window.lexai.localChat.get(conversationId);
     if (!storedConversation) return;
@@ -255,11 +266,13 @@ function App() {
     void loadLocalInferenceStatus();
     void loadLocalModelStatus();
     void loadLocalConversations();
+    void loadUsageSummary();
     void window.lexai.runtimeMode.get().then((mode) => setRuntimeMode(mode));
 
     const intervalId = window.setInterval(() => {
       void loadLocalInferenceStatus();
       void loadLocalModelStatus();
+      void loadUsageSummary();
     }, 15000);
 
     return () => window.clearInterval(intervalId);
@@ -347,6 +360,10 @@ function App() {
     if (!seconds || seconds <= 0) return null;
     if (seconds < 60) return `${seconds}s`;
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  }
+
+  function formatPercent(value: number): string {
+    return `${value.toFixed(1)}%`;
   }
 
   async function handleRuntimeModeChange(nextMode: RuntimeMode) {
@@ -501,6 +518,42 @@ function App() {
         </div>
 
         <div className="px-4 pb-3">
+          {usageSummary && (
+            <div className={`mb-3 rounded-2xl border p-3 ${
+              usageSummary.usagePercent >= usageSummary.hardLimit
+                ? 'border-rose-400/40 bg-rose-400/10'
+                : usageSummary.usagePercent >= usageSummary.warningThreshold
+                  ? 'border-amber-400/40 bg-amber-400/10'
+                  : 'border-lexai-border bg-lexai-bg/70'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-lexai-muted">本月用量</div>
+                  <div className="mt-1 text-sm font-medium text-lexai-text">
+                    {usageSummary.plan} · {usageSummary.used.total.toLocaleString()} / {usageSummary.quota.toLocaleString()}
+                  </div>
+                </div>
+                <div className="text-xs font-medium text-lexai-text">{formatPercent(usageSummary.usagePercent)}</div>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-lexai-surface">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    usageSummary.usagePercent >= usageSummary.hardLimit
+                      ? 'bg-rose-400'
+                      : usageSummary.usagePercent >= usageSummary.warningThreshold
+                        ? 'bg-amber-400'
+                        : 'bg-sky-400'
+                  }`}
+                  style={{ width: `${Math.min(usageSummary.usagePercent, 100)}%` }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] text-lexai-muted">
+                <span>输入 {usageSummary.used.inputTokens.toLocaleString()} · 输出 {usageSummary.used.outputTokens.toLocaleString()}</span>
+                <span>缓存 {usageSummary.used.cacheReadTokens.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
             <div className="flex items-center justify-between">
               <div>
@@ -759,6 +812,17 @@ function App() {
 
         <div className="border-t border-lexai-border bg-lexai-surface p-4">
           <div className="mx-auto max-w-5xl">
+            {usageSummary && usageSummary.usagePercent >= usageSummary.warningThreshold && (
+              <div className={`mb-3 rounded-2xl border px-4 py-3 text-sm ${
+                usageSummary.usagePercent >= usageSummary.hardLimit
+                  ? 'border-rose-400/40 bg-rose-400/10 text-rose-100'
+                  : 'border-amber-400/40 bg-amber-400/10 text-amber-100'
+              }`}>
+                {usageSummary.usagePercent >= usageSummary.hardLimit
+                  ? '本月用量已达到上限，请升级套餐或等待下个计费周期。'
+                  : '本月用量已超过 80%，建议留意剩余额度。'}
+              </div>
+            )}
             {slashSuggestions.length > 0 && (
               <div className="mb-3 rounded-2xl border border-lexai-border bg-lexai-bg/90 p-2">
                 <div className="mb-2 px-2 text-[11px] uppercase tracking-wide text-lexai-muted">Slash Command</div>

@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('lexai', {
     set: (payload: { accessToken: string; refreshToken?: string; expiresAt?: number | null }) => ipcRenderer.invoke('auth-session:set', payload),
     clear: () => ipcRenderer.invoke('auth-session:clear'),
   },
+  usage: {
+    getCurrent: () => ipcRenderer.invoke('usage:get-current'),
+  },
   runtimeMode: {
     get: () => ipcRenderer.invoke('runtime-mode:get'),
     set: (mode: 'cloud' | 'local') => ipcRenderer.invoke('runtime-mode:set', mode),

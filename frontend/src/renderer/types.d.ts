@@ -36,6 +36,23 @@ export interface AuthSessionState {
   expiresAt?: number | null;
 }
 
+export interface UsageCurrentState {
+  plan: 'starter' | 'professional' | 'enterprise';
+  periodStart: string;
+  periodEnd: string;
+  quota: number;
+  used: {
+    total: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+  };
+  usagePercent: number;
+  warningThreshold: number;
+  hardLimit: number;
+}
+
 export interface DesktopChatResponse {
   content: string;
   model: string;
@@ -98,6 +115,9 @@ export interface LexaiBridge {
     get: () => Promise<AuthSessionState>;
     set: (payload: AuthSessionState & { accessToken: string }) => Promise<AuthSessionState>;
     clear: () => Promise<{ ok: true }>;
+  };
+  usage: {
+    getCurrent: () => Promise<UsageCurrentState | null>;
   };
   runtimeMode: {
     get: () => Promise<'cloud' | 'local'>;

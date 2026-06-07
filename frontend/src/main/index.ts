@@ -55,6 +55,23 @@ interface AuthSessionPayload {
   expiresAt?: number | null;
 }
 
+interface UsageCurrentResponse {
+  plan: 'starter' | 'professional' | 'enterprise';
+  periodStart: string;
+  periodEnd: string;
+  quota: number;
+  used: {
+    total: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+  };
+  usagePercent: number;
+  warningThreshold: number;
+  hardLimit: number;
+}
+
 function getApiBaseUrl(): string {
   return process.env.VITE_API_BASE_URL || 'http://localhost:3001/v1';
 }
@@ -138,6 +155,28 @@ ipcMain.handle('auth-session:set', async (_event, payload: AuthSessionPayload) =
 
 ipcMain.handle('auth-session:clear', async () => {
   return secureTokenStore.clearSession();
+});
+
+ipcMain.handle('usage:get-current', async (): Promise<UsageCurrentResponse | null> => {
+  const session = secureTokenStore.getSession();
+  if (!session.accessToken) {
+    return null;
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/usage/current`, {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      return null;
+    }
+    throw new Error(`Usage API error: ${response.status} ${await response.text()}`);
+  }
+
+  return await response.json() as UsageCurrentResponse;
 });
 
 ipcMain.handle('practice-profile:get', async (_event, plugin: string) => {
@@ -313,6 +352,9 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(secureTokenStore.getSession().accessToken
+        ? { Authorization: `Bearer ${secureTokenStore.getSession().accessToken}` }
+        : {}),
     },
     body: JSON.stringify({
       message: payload.message,
