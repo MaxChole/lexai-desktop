@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import type { LocalConversationAttachment } from './local-chat-store.js';
 
 export interface StoredDocumentInput {
   path: string;
@@ -18,6 +19,10 @@ export interface StoredDocumentRecord {
 
 function sanitizeFileName(fileName: string): string {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function isTextPreviewable(fileName: string): boolean {
+  return ['.txt', '.md', '.markdown'].includes(path.extname(fileName).toLowerCase());
 }
 
 export class LocalDocumentStore {
@@ -53,5 +58,41 @@ export class LocalDocumentStore {
   async deleteConversationFiles(conversationId: string): Promise<void> {
     const conversationDir = path.join(this.rootDir, conversationId);
     await fs.rm(conversationDir, { recursive: true, force: true });
+  }
+
+  async buildAttachmentContext(attachments: LocalConversationAttachment[]): Promise<string | undefined> {
+    if (attachments.length === 0) {
+      return undefined;
+    }
+
+    const sections = await Promise.all(attachments.map(async (attachment, index) => {
+      const header = [
+        `Attachment ${index + 1}`,
+        `name: ${attachment.name}`,
+        `size: ${attachment.size} bytes`,
+      ];
+
+      if (!isTextPreviewable(attachment.name)) {
+        header.push('preview: unavailable (binary document; rely on filename and user instructions)');
+        return header.join('\n');
+      }
+
+      try {
+        const raw = await fs.readFile(attachment.storedPath, 'utf-8');
+        const normalized = raw.replace(/\r\n/g, '\n').trim();
+        const preview = normalized.slice(0, 4000);
+        header.push('preview:');
+        header.push(preview || '(empty file)');
+        if (normalized.length > preview.length) {
+          header.push('[truncated]');
+        }
+        return header.join('\n');
+      } catch (error) {
+        header.push(`preview: unavailable (${error instanceof Error ? error.message : String(error)})`);
+        return header.join('\n');
+      }
+    }));
+
+    return `# Local Attachment Context\n\nThe current desktop conversation includes these local files. Use them when relevant, and explicitly say when a binary file could not be fully read.\n\n${sections.join('\n\n---\n\n')}`;
   }
 }

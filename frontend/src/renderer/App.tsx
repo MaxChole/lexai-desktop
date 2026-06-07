@@ -727,7 +727,7 @@ function App() {
           </div>
           {runtimeMode === 'local' && activeAttachments.length > 0 && (
             <p className="mt-2 text-xs text-lexai-muted">
-              当前本地会话已绑定 {activeAttachments.length} 个附件。点击上方附件卡片可直接打开原始副本。
+              当前本地会话已绑定 {activeAttachments.length} 个附件。发送消息时，本地模式会自动注入这些附件的文件名；TXT/Markdown 还会附带文本片段。
             </p>
           )}
           <p className="text-xs text-lexai-muted mt-2 text-center">

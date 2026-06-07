@@ -180,6 +180,13 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       const systemPrompt = await localSkillEngine.buildSystemPrompt(payload.skillId);
       messages.push({ role: 'system', content: systemPrompt });
     }
+    const existingConversation = payload.conversationId
+      ? localChatStore.getConversation(payload.conversationId)
+      : null;
+    const attachmentContext = await localDocumentStore.buildAttachmentContext(existingConversation?.attachments ?? []);
+    if (attachmentContext) {
+      messages.push({ role: 'system', content: attachmentContext });
+    }
     messages.push({ role: 'user', content: payload.message });
 
     const response = await fetch(`${localStatus.baseUrl}/chat/completions`, {
