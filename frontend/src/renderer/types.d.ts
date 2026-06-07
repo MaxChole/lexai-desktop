@@ -114,6 +114,7 @@ export interface LexaiBridge {
   };
   localDocument: {
     pick: (conversationId?: string, skillId?: string) => Promise<LocalConversationRecord | null>;
+    importFiles: (conversationId: string | undefined, skillId: string | undefined, files: Array<{ path: string; name: string; size: number }>) => Promise<LocalConversationRecord | null>;
     open: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
   };
   chat: {

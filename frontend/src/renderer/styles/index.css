@@ -13,3 +13,69 @@ body {
 #root {
   min-height: 100vh;
 }
+
+.lexai-markdown ul,
+.lexai-markdown ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.lexai-markdown h1,
+.lexai-markdown h2,
+.lexai-markdown h3 {
+  margin: 0 0 0.75rem;
+  color: #f8fafc;
+}
+
+.lexai-markdown h1 {
+  font-size: 1.2rem;
+}
+
+.lexai-markdown h2 {
+  font-size: 1.1rem;
+}
+
+.lexai-markdown table {
+  width: 100%;
+  margin-bottom: 0.75rem;
+  border-collapse: collapse;
+}
+
+.lexai-markdown th,
+.lexai-markdown td {
+  border: 1px solid #334155;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.lexai-markdown pre code .token.comment,
+.lexai-markdown pre code .token.prolog,
+.lexai-markdown pre code .token.doctype,
+.lexai-markdown pre code .token.cdata {
+  color: #64748b;
+}
+
+.lexai-markdown pre code .token.keyword,
+.lexai-markdown pre code .token.selector,
+.lexai-markdown pre code .token.important {
+  color: #7dd3fc;
+}
+
+.lexai-markdown pre code .token.string,
+.lexai-markdown pre code .token.attr-value,
+.lexai-markdown pre code .token.char,
+.lexai-markdown pre code .token.regex {
+  color: #86efac;
+}
+
+.lexai-markdown pre code .token.function,
+.lexai-markdown pre code .token.class-name {
+  color: #f9a8d4;
+}
+
+.lexai-markdown pre code .token.number,
+.lexai-markdown pre code .token.boolean,
+.lexai-markdown pre code .token.constant,
+.lexai-markdown pre code .token.symbol {
+  color: #fbbf24;
+}

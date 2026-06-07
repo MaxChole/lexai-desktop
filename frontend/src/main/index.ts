@@ -201,6 +201,29 @@ ipcMain.handle('local-document:pick', async (_event, payload: { conversationId?:
   return updatedConversation;
 });
 
+ipcMain.handle('local-document:import-files', async (_event, payload: {
+  conversationId?: string;
+  skillId?: string;
+  files: Array<{ path: string; name: string; size: number }>;
+}) => {
+  if (!payload.files.length) {
+    return null;
+  }
+
+  const conversation = payload.conversationId
+    ? await localChatStore.getConversation(payload.conversationId)
+    : null;
+  const ensuredConversation = conversation ?? await localChatStore.createConversation(payload.skillId);
+  const storedDocuments = await localDocumentStore.saveFiles(ensuredConversation.id, payload.files);
+  const updatedConversation = await localChatStore.addAttachments({
+    conversationId: ensuredConversation.id,
+    skillId: payload.skillId,
+    attachments: storedDocuments,
+  });
+
+  return updatedConversation;
+});
+
 ipcMain.handle('local-document:open', async (_event, filePath: string) => {
   const error = await shell.openPath(filePath);
   return { ok: error.length === 0, error: error || undefined };

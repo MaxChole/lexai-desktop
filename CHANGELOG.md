@@ -16,6 +16,7 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- T-05 核心对话 UI 明显收口：前端补充 Slash Command 技能补全、Markdown/代码渲染、验证标记高亮，以及本地模式拖拽上传入口
 - T-04 认证与计费开始落地：后端新增 Supabase 邮箱注册/登录/当前用户接口、Stripe 订阅接口与 webhook 路由，Electron Main 新增本地加密会话令牌存储桥接
 - 本地模式会话元数据已切到 SQLite：Electron Main 现在把本地会话、消息和附件索引写入 `userData/local.db`，附件内容仍存本地文件系统
 - 本地模型管理面板已接入：支持查看 Qwen2.5-7B 安装状态、下载进度、速度、剩余时间、RAM 警告，以及下载/暂停/删除操作

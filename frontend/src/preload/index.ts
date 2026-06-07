@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('lexai', {
   },
   localDocument: {
     pick: (conversationId?: string, skillId?: string) => ipcRenderer.invoke('local-document:pick', { conversationId, skillId }),
+    importFiles: (conversationId: string | undefined, skillId: string | undefined, files: Array<{ path: string; name: string; size: number }>) =>
+      ipcRenderer.invoke('local-document:import-files', { conversationId, skillId, files }),
     open: (filePath: string) => ipcRenderer.invoke('local-document:open', filePath),
   },
   chat: {

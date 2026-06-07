@@ -14,27 +14,35 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["lexai", "legal-ai", "electron"],
+  "keywords": [
+    "lexai",
+    "legal-ai",
+    "electron"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "electron-store": "^8.1.0",
+    "prismjs": "^1.30.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "electron": "^28.3.3",
-    "electron-builder": "^24.13.3",
-    "concurrently": "^8.2.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "vite": "^5.4.14",
-    "@vitejs/plugin-react": "^4.3.4",
-    "tailwindcss": "^3.4.17",
-    "postcss": "^8.5.1",
-    "autoprefixer": "^10.4.20",
+    "@types/node": "^22.13.4",
+    "@types/prismjs": "^1.26.6",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@types/node": "^22.13.4"
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.14"
   }
 }
