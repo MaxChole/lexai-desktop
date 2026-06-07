@@ -8,6 +8,13 @@ contextBridge.exposeInMainWorld('lexai', {
   localInference: {
     status: () => ipcRenderer.invoke('local-inference:status'),
   },
+  runtimeMode: {
+    get: () => ipcRenderer.invoke('runtime-mode:get'),
+    set: (mode: 'cloud' | 'local') => ipcRenderer.invoke('runtime-mode:set', mode),
+  },
+  chat: {
+    send: (message: string) => ipcRenderer.invoke('chat:send', { message }),
+  },
 
   // Platform info
   platform: process.platform,

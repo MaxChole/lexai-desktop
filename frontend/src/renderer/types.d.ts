@@ -13,10 +13,29 @@ export interface LocalInferenceStatus {
   lastError?: string;
 }
 
+export interface DesktopChatResponse {
+  content: string;
+  model: string;
+  provider: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
+  };
+}
+
 export interface LexaiBridge {
   api: LexaiAPI;
   localInference: {
     status: () => Promise<LocalInferenceStatus>;
+  };
+  runtimeMode: {
+    get: () => Promise<'cloud' | 'local'>;
+    set: (mode: 'cloud' | 'local') => Promise<'cloud' | 'local'>;
+  };
+  chat: {
+    send: (message: string) => Promise<DesktopChatResponse>;
   };
   platform: string;
   onNotification: (callback: (data: unknown) => void) => void;

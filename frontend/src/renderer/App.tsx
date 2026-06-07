@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { LocalInferenceStatus } from './types';
+import type { DesktopChatResponse, LocalInferenceStatus } from './types';
 
 interface SkillItem {
   id: string;
@@ -29,6 +29,12 @@ type CatalogItem = SkillItem | AgentItem;
 type Jurisdiction = 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL';
 type RuntimeMode = 'cloud' | 'local';
 
+interface ConversationMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  meta?: string;
+}
+
 const defaultLocalInferenceStatus: LocalInferenceStatus = {
   enabled: false,
   provider: 'embedded',
@@ -48,6 +54,8 @@ function App() {
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('cloud');
   const [localInference, setLocalInference] = useState<LocalInferenceStatus>(defaultLocalInferenceStatus);
   const [localStatusLoading, setLocalStatusLoading] = useState(false);
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [sending, setSending] = useState(false);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -110,6 +118,9 @@ function App() {
 
   useEffect(() => {
     void loadLocalInferenceStatus();
+    void window.lexai.runtimeMode.get().then((mode) => {
+      setRuntimeMode(mode);
+    });
     const intervalId = window.setInterval(() => {
       void loadLocalInferenceStatus();
     }, 15000);
@@ -150,6 +161,47 @@ function App() {
       : localInference.enabled
         ? '未连接'
         : '未启用';
+
+  async function handleRuntimeModeChange(nextMode: RuntimeMode) {
+    if (nextMode === 'local' && !localReady) return;
+    const savedMode = await window.lexai.runtimeMode.set(nextMode);
+    setRuntimeMode(savedMode);
+  }
+
+  async function handleSend() {
+    const trimmed = inputText.trim();
+    if (!trimmed || sending) return;
+
+    setSending(true);
+    setConversation((current) => [
+      ...current,
+      { role: 'user', content: trimmed },
+    ]);
+    setInputText('');
+
+    try {
+      const result: DesktopChatResponse = await window.lexai.chat.send(trimmed);
+      setConversation((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          content: result.content,
+          meta: `${result.provider} · ${result.model}`,
+        },
+      ]);
+    } catch (error) {
+      setConversation((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          content: error instanceof Error ? error.message : String(error),
+          meta: 'error',
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <div className="flex h-screen bg-lexai-bg">
@@ -268,7 +320,7 @@ function App() {
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-lexai-border bg-lexai-bg/70 p-1">
             <button
-              onClick={() => setRuntimeMode('cloud')}
+              onClick={() => void handleRuntimeModeChange('cloud')}
               className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
                 runtimeMode === 'cloud'
                   ? 'bg-sky-500/20 text-sky-300'
@@ -278,9 +330,7 @@ function App() {
               云端
             </button>
             <button
-              onClick={() => {
-                if (localReady) setRuntimeMode('local');
-              }}
+              onClick={() => void handleRuntimeModeChange('local')}
               disabled={!localReady}
               className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
                 runtimeMode === 'local'
@@ -297,48 +347,75 @@ function App() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="text-center text-lexai-muted py-12">
-            <p className="text-lg">欢迎使用 LexAI Desktop</p>
-            <p className="text-sm mt-2">
-              选择法律体系，输入 <code className="bg-lexai-surface px-1 rounded">/</code> 查看可用 Skills & Agents
-            </p>
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-lexai-border bg-lexai-surface px-4 py-2 text-xs">
-              <span className={runtimeMode === 'local' ? 'text-emerald-300' : 'text-sky-300'}>
-                {runtimeMode === 'local' ? '当前走本地推理链路' : '当前走云端模型链路'}
-              </span>
-              <span className="text-lexai-muted">
-                {runtimeMode === 'local'
-                  ? `${providerLabel} · ${localInference.model}`
-                  : 'Claude / DeepSeek / Kimi'}
-              </span>
-            </div>
-            <div className="mt-6 grid grid-cols-2 gap-4 max-w-lg mx-auto">
-              <div className="bg-lexai-surface rounded-lg p-4 text-sm text-lexai-text">
-                <span className="text-lexai-primary font-bold">Skills</span>
-                <span className="text-xs text-lexai-muted ml-1">({skills.length})</span>
-                <p className="text-xs text-lexai-muted mt-1">用户直接调用的法律技能</p>
+          {conversation.length === 0 ? (
+            <div className="text-center text-lexai-muted py-12">
+              <p className="text-lg">欢迎使用 LexAI Desktop</p>
+              <p className="text-sm mt-2">
+                选择法律体系，输入 <code className="bg-lexai-surface px-1 rounded">/</code> 查看可用 Skills & Agents
+              </p>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-lexai-border bg-lexai-surface px-4 py-2 text-xs">
+                <span className={runtimeMode === 'local' ? 'text-emerald-300' : 'text-sky-300'}>
+                  {runtimeMode === 'local' ? '当前走本地推理链路' : '当前走云端模型链路'}
+                </span>
+                <span className="text-lexai-muted">
+                  {runtimeMode === 'local'
+                    ? `${providerLabel} · ${localInference.model}`
+                    : 'Claude / DeepSeek / Kimi'}
+                </span>
               </div>
-              <div className="bg-lexai-surface rounded-lg p-4 text-sm text-lexai-text">
-                <span className="text-lexai-accent font-bold">Agents</span>
-                <span className="text-xs text-lexai-muted ml-1">({agents.length})</span>
-                <p className="text-xs text-lexai-muted mt-1">后台定时执行的自动任务</p>
-              </div>
-              <div className="col-span-2 bg-lexai-surface rounded-lg p-4 text-left text-sm text-lexai-text">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <span className="font-bold text-emerald-300">本地推理引擎</span>
-                    <span className="ml-2 text-xs text-lexai-muted">{providerLabel}</span>
-                  </div>
-                  <span className={`rounded-full px-2 py-1 text-[11px] ${localInference.healthy ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                    {localHealthLabel}
-                  </span>
+              <div className="mt-6 grid grid-cols-2 gap-4 max-w-lg mx-auto">
+                <div className="bg-lexai-surface rounded-lg p-4 text-sm text-lexai-text">
+                  <span className="text-lexai-primary font-bold">Skills</span>
+                  <span className="text-xs text-lexai-muted ml-1">({skills.length})</span>
+                  <p className="text-xs text-lexai-muted mt-1">用户直接调用的法律技能</p>
                 </div>
-                <p className="mt-2 text-xs text-lexai-muted">
-                  默认推荐 embedded runtime，不依赖用户系统先安装 Ollama；若本机存在 Ollama，可走兼容 provider。
-                </p>
+                <div className="bg-lexai-surface rounded-lg p-4 text-sm text-lexai-text">
+                  <span className="text-lexai-accent font-bold">Agents</span>
+                  <span className="text-xs text-lexai-muted ml-1">({agents.length})</span>
+                  <p className="text-xs text-lexai-muted mt-1">后台定时执行的自动任务</p>
+                </div>
+                <div className="col-span-2 bg-lexai-surface rounded-lg p-4 text-left text-sm text-lexai-text">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="font-bold text-emerald-300">本地推理引擎</span>
+                      <span className="ml-2 text-xs text-lexai-muted">{providerLabel}</span>
+                    </div>
+                    <span className={`rounded-full px-2 py-1 text-[11px] ${localInference.healthy ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                      {localHealthLabel}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-lexai-muted">
+                    默认推荐 embedded runtime，不依赖用户系统先安装 Ollama；若本机存在 Ollama，可走兼容 provider。
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+              {conversation.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={`rounded-2xl border px-4 py-3 ${
+                    message.role === 'user'
+                      ? 'ml-auto max-w-[80%] border-sky-500/30 bg-sky-500/10 text-sky-50'
+                      : 'mr-auto max-w-[85%] border-lexai-border bg-lexai-surface text-lexai-text'
+                  }`}
+                >
+                  <div className="text-sm whitespace-pre-wrap leading-6">{message.content}</div>
+                  {message.meta && (
+                    <div className="mt-2 text-[11px] uppercase tracking-wide text-lexai-muted">
+                      {message.meta}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {sending && (
+                <div className="mr-auto max-w-[85%] rounded-2xl border border-lexai-border bg-lexai-surface px-4 py-3 text-sm text-lexai-muted">
+                  正在生成回复...
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Input */}
@@ -348,11 +425,25 @@ function App() {
               type="text"
               value={inputText}
               onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSend();
+                }
+              }}
               placeholder="输入消息或 / 查看 Skills..."
               className="flex-1 bg-lexai-bg border border-lexai-border rounded-lg px-4 py-2 text-lexai-text placeholder-lexai-muted focus:outline-none focus:border-lexai-primary"
             />
-            <button className="bg-lexai-primary text-white px-4 py-2 rounded-lg hover:bg-lexai-primary/80 transition-colors">
-              发送
+            <button
+              onClick={() => void handleSend()}
+              disabled={sending || !inputText.trim()}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                sending || !inputText.trim()
+                  ? 'bg-lexai-primary/40 text-white/70 cursor-not-allowed'
+                  : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
+              }`}
+            >
+              {sending ? '发送中...' : '发送'}
             </button>
           </div>
           <p className="text-xs text-lexai-muted mt-2 text-center">

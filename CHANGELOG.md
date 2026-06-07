@@ -16,6 +16,8 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- 本地模式选择已持久化到桌面端设置，重启后保留云端/本地运行模式
+- 前端发送链路已接入桌面 IPC：云端模式走后端 `/chat`，本地模式直连本地推理接口
 - 前端接入本地推理状态展示与模式切换入口，可在界面查看 embedded/Ollama provider、健康状态与当前云端/本地模式
 - 将 T-11 和 PRD 的本地模式方案从“Ollama 唯一方案”调整为“embedded sidecar 优先，兼容 Ollama”
 - 接入本地推理引擎 sidecar 骨架：Electron Main 负责启动、停止和健康检查本地 runtime
