@@ -32,12 +32,22 @@ export interface LocalConversationMessage {
   meta?: string;
 }
 
+export interface LocalConversationAttachment {
+  id: string;
+  name: string;
+  storedPath: string;
+  originalPath: string;
+  size: number;
+  createdAt: string;
+}
+
 export interface LocalConversationSummary {
   id: string;
   title: string;
   skillId?: string;
   updatedAt: string;
   messageCount: number;
+  attachmentCount: number;
 }
 
 export interface LocalConversationRecord {
@@ -47,6 +57,7 @@ export interface LocalConversationRecord {
   createdAt: string;
   updatedAt: string;
   messages: LocalConversationMessage[];
+  attachments: LocalConversationAttachment[];
 }
 
 export interface LexaiBridge {
@@ -66,6 +77,10 @@ export interface LexaiBridge {
     list: () => Promise<LocalConversationSummary[]>;
     get: (conversationId: string) => Promise<LocalConversationRecord | null>;
     delete: (conversationId: string) => Promise<{ ok: true }>;
+  };
+  localDocument: {
+    pick: (conversationId?: string, skillId?: string) => Promise<LocalConversationRecord | null>;
+    open: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
   };
   chat: {
     send: (message: string, skillId?: string, conversationId?: string) => Promise<DesktopChatResponse>;

@@ -6,6 +6,15 @@ export interface LocalConversationMessage {
   meta?: string;
 }
 
+export interface LocalConversationAttachment {
+  id: string;
+  name: string;
+  storedPath: string;
+  originalPath: string;
+  size: number;
+  createdAt: string;
+}
+
 export interface LocalConversationRecord {
   id: string;
   title: string;
@@ -13,6 +22,7 @@ export interface LocalConversationRecord {
   createdAt: string;
   updatedAt: string;
   messages: LocalConversationMessage[];
+  attachments: LocalConversationAttachment[];
 }
 
 interface LocalChatState {
@@ -25,6 +35,7 @@ export interface LocalConversationSummary {
   skillId?: string;
   updatedAt: string;
   messageCount: number;
+  attachmentCount: number;
 }
 
 function makeConversationTitle(message: string): string {
@@ -53,6 +64,7 @@ export class LocalChatStore {
       skillId: conversation.skillId,
       updatedAt: conversation.updatedAt,
       messageCount: conversation.messages.length,
+      attachmentCount: conversation.attachments.length,
     }));
   }
 
@@ -64,6 +76,49 @@ export class LocalChatStore {
     const conversations = { ...this.store.get('conversations') };
     delete conversations[id];
     this.store.set('conversations', conversations);
+  }
+
+  createConversation(skillId?: string): LocalConversationRecord {
+    const conversations = { ...this.store.get('conversations') };
+    const now = new Date().toISOString();
+    const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const conversation: LocalConversationRecord = {
+      id,
+      title: '新本地会话',
+      skillId,
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+      attachments: [],
+    };
+
+    conversations[id] = conversation;
+    this.store.set('conversations', conversations);
+    return conversation;
+  }
+
+  addAttachments(payload: {
+    conversationId: string;
+    skillId?: string;
+    attachments: LocalConversationAttachment[];
+  }): LocalConversationRecord {
+    const conversations = { ...this.store.get('conversations') };
+    const existing = conversations[payload.conversationId];
+    if (!existing) {
+      throw new Error(`Local conversation not found: ${payload.conversationId}`);
+    }
+
+    const conversation: LocalConversationRecord = {
+      ...existing,
+      skillId: payload.skillId ?? existing.skillId,
+      updatedAt: new Date().toISOString(),
+      attachments: [...existing.attachments, ...payload.attachments],
+    };
+
+    conversations[payload.conversationId] = conversation;
+    this.store.set('conversations', conversations);
+    return conversation;
   }
 
   saveExchange(payload: {
@@ -88,6 +143,7 @@ export class LocalChatStore {
         payload.userMessage,
         payload.assistantMessage,
       ],
+      attachments: existing?.attachments ?? [],
     };
 
     conversations[id] = conversation;

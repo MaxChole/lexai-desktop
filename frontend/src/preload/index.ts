@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('lexai', {
     get: (conversationId: string) => ipcRenderer.invoke('local-chat:get', conversationId),
     delete: (conversationId: string) => ipcRenderer.invoke('local-chat:delete', conversationId),
   },
+  localDocument: {
+    pick: (conversationId?: string, skillId?: string) => ipcRenderer.invoke('local-document:pick', { conversationId, skillId }),
+    open: (filePath: string) => ipcRenderer.invoke('local-document:open', filePath),
+  },
   chat: {
     send: (message: string, skillId?: string, conversationId?: string) => ipcRenderer.invoke('chat:send', { message, skillId, conversationId }),
   },

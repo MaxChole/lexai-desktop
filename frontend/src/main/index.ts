@@ -1,17 +1,22 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import fs from 'fs';
 import Store from 'electron-store';
 import path from 'path';
+import type { OpenDialogOptions } from 'electron';
 import {
   LocalInferenceSidecar,
   loadLocalInferenceConfig,
 } from './local-inference-sidecar.js';
 import { LocalChatStore } from './local-chat-store.js';
+import { LocalDocumentStore } from './local-document-store.js';
 import { LocalSkillEngine } from './local-skill-engine.js';
 
 let mainWindow: BrowserWindow | null = null;
 const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
 const localProfilesDir = path.join(app.getPath('userData'), 'practice-profiles');
+const localDocumentsDir = path.join(app.getPath('userData'), 'local-documents');
 const localChatStore = new LocalChatStore();
+const localDocumentStore = new LocalDocumentStore(localDocumentsDir);
 const localSkillEngine = new LocalSkillEngine(localProfilesDir);
 const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
   defaults: {
@@ -113,8 +118,52 @@ ipcMain.handle('local-chat:get', async (_event, conversationId: string) => {
 });
 
 ipcMain.handle('local-chat:delete', async (_event, conversationId: string) => {
+  await localDocumentStore.deleteConversationFiles(conversationId);
   localChatStore.deleteConversation(conversationId);
   return { ok: true };
+});
+
+ipcMain.handle('local-document:pick', async (_event, payload: { conversationId?: string; skillId?: string }) => {
+  const dialogOptions: OpenDialogOptions = {
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Legal Documents', extensions: ['pdf', 'doc', 'docx', 'txt', 'md'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  };
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const conversation = payload.conversationId
+    ? localChatStore.getConversation(payload.conversationId)
+    : null;
+  const ensuredConversation = conversation ?? localChatStore.createConversation(payload.skillId);
+  const fileStats = await Promise.all(result.filePaths.map(async (filePath) => {
+    const stat = await fs.promises.stat(filePath);
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      size: stat.size,
+    };
+  }));
+  const storedDocuments = await localDocumentStore.saveFiles(ensuredConversation.id, fileStats);
+  const updatedConversation = localChatStore.addAttachments({
+    conversationId: ensuredConversation.id,
+    skillId: payload.skillId,
+    attachments: storedDocuments,
+  });
+
+  return updatedConversation;
+});
+
+ipcMain.handle('local-document:open', async (_event, filePath: string) => {
+  const error = await shell.openPath(filePath);
+  return { ok: error.length === 0, error: error || undefined };
 });
 
 ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise<ChatResponsePayload> => {

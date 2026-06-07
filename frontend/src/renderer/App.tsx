@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type {
   DesktopChatResponse,
+  LocalConversationAttachment,
   LocalConversationRecord,
   LocalConversationSummary,
   LocalInferenceStatus,
@@ -64,6 +65,8 @@ function App() {
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
   const [localConversations, setLocalConversations] = useState<LocalConversationSummary[]>([]);
   const [activeLocalConversationId, setActiveLocalConversationId] = useState<string | null>(null);
+  const [activeAttachments, setActiveAttachments] = useState<LocalConversationAttachment[]>([]);
+  const [attachingDocuments, setAttachingDocuments] = useState(false);
   const [practiceProfileDraft, setPracticeProfileDraft] = useState('');
   const [practiceProfileLoading, setPracticeProfileLoading] = useState(false);
   const [practiceProfileSaving, setPracticeProfileSaving] = useState(false);
@@ -106,6 +109,7 @@ function App() {
 
     setActiveLocalConversationId(conversation.id);
     setConversation(conversation.messages);
+    setActiveAttachments(conversation.attachments);
   }
 
   // Load skills and agents when jurisdiction changes
@@ -271,6 +275,7 @@ function App() {
     if (activeLocalConversationId === conversationId) {
       setActiveLocalConversationId(null);
       setConversation([]);
+      setActiveAttachments([]);
     }
     await loadLocalConversations();
   }
@@ -278,6 +283,7 @@ function App() {
   function handleNewConversation() {
     setConversation([]);
     setActiveLocalConversationId(null);
+    setActiveAttachments([]);
   }
 
   function formatUpdatedAt(value: string): string {
@@ -288,6 +294,28 @@ function App() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  }
+
+  function formatFileSize(size: number): string {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async function handleAttachDocuments() {
+    setAttachingDocuments(true);
+    try {
+      const conversation = await window.lexai.localDocument.pick(activeLocalConversationId ?? undefined, selectedSkill?.id);
+      if (!conversation) return;
+      setActiveLocalConversationId(conversation.id);
+      setConversation(conversation.messages);
+      setActiveAttachments(conversation.attachments);
+      await loadLocalConversations();
+    } catch (error) {
+      console.error('Attach local documents error:', error);
+    } finally {
+      setAttachingDocuments(false);
+    }
   }
 
   async function handleSavePracticeProfile() {
@@ -444,7 +472,7 @@ function App() {
                       {conversation.title}
                     </div>
                     <div className="mt-1 text-[11px] text-lexai-muted">
-                      {formatUpdatedAt(conversation.updatedAt)} · {conversation.messageCount} 条消息
+                      {formatUpdatedAt(conversation.updatedAt)} · {conversation.messageCount} 条消息 · {conversation.attachmentCount} 个附件
                     </div>
                   </button>
                   <div className="mt-2 flex items-center justify-between gap-2">
@@ -565,6 +593,22 @@ function App() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6">
+          {runtimeMode === 'local' && activeAttachments.length > 0 && (
+            <div className="mx-auto mb-4 flex w-full max-w-4xl flex-wrap gap-2">
+              {activeAttachments.map((attachment) => (
+                <button
+                  key={attachment.id}
+                  onClick={() => void window.lexai.localDocument.open(attachment.storedPath)}
+                  className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-left hover:border-lexai-primary/40"
+                >
+                  <div className="text-xs font-medium text-lexai-text">{attachment.name}</div>
+                  <div className="mt-1 text-[11px] text-lexai-muted">
+                    {formatFileSize(attachment.size)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
           {conversation.length === 0 ? (
             <div className="text-center text-lexai-muted py-12">
               <p className="text-lg">欢迎使用 LexAI Desktop</p>
@@ -608,6 +652,9 @@ function App() {
                     <p className="mt-2 text-xs text-lexai-muted">
                       本地模式下消息历史会保存在桌面端，不经过后端。
                     </p>
+                    <p className="mt-2 text-xs text-lexai-muted">
+                      现在也可以把 PDF、Word、TXT 等附件复制到本地工作区并绑定到当前会话。
+                    </p>
                   </div>
                 </div>
               </div>
@@ -642,6 +689,17 @@ function App() {
         {/* Input */}
         <div className="border-t border-lexai-border bg-lexai-surface p-4">
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => void handleAttachDocuments()}
+              disabled={runtimeMode !== 'local' || attachingDocuments}
+              className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                runtimeMode !== 'local' || attachingDocuments
+                  ? 'border-lexai-border text-lexai-muted/50 cursor-not-allowed'
+                  : 'border-lexai-border text-lexai-muted hover:text-lexai-text'
+              }`}
+            >
+              {attachingDocuments ? '添加中...' : '添加文件'}
+            </button>
             <input
               type="text"
               value={inputText}
@@ -667,6 +725,11 @@ function App() {
               {sending ? '发送中...' : '发送'}
             </button>
           </div>
+          {runtimeMode === 'local' && activeAttachments.length > 0 && (
+            <p className="mt-2 text-xs text-lexai-muted">
+              当前本地会话已绑定 {activeAttachments.length} 个附件。点击上方附件卡片可直接打开原始副本。
+            </p>
+          )}
           <p className="text-xs text-lexai-muted mt-2 text-center">
             AI 生成内容仅供参考，不构成法律意见。[需验证] 标记需人工核实。
           </p>
