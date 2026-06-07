@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { SkillRegistry, SkillEngine } from '../services/skill-engine/index.js';
+import { resolveReferencesDir } from '../services/reference-path.js';
 import type { Jurisdiction } from '../types/shared.js';
 
 let registry: SkillRegistry | null = null;
@@ -8,8 +9,7 @@ let engine: SkillEngine | null = null;
 async function ensureRegistry(): Promise<SkillRegistry> {
   if (!registry) {
     registry = new SkillRegistry();
-    // References dir relative to backend — go up to project root
-    const referencesDir = process.env.REFERENCES_DIR || '../references';
+    const referencesDir = resolveReferencesDir(process.env.REFERENCES_DIR);
     await registry.load(referencesDir);
     engine = new SkillEngine(registry);
   }
@@ -41,7 +41,10 @@ export default async function skillRoutes(app: FastifyInstance) {
       userInvocable: s.userInvocable,
     }));
 
-    return { skills: skillsMeta };
+    return {
+      skills: skillsMeta,
+      total: skillsMeta.length,
+    };
   });
 
   // GET /skills/:skillId — get single skill metadata (still no raw prompt in listing)

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { SkillRegistry, SkillEngine } from '../services/skill-engine/index.js';
 import { ModelRouter } from '../services/model-router/index.js';
+import { resolveReferencesDir } from '../services/reference-path.js';
 import type { Jurisdiction, Plan } from '../types/shared.js';
 
 let registry: SkillRegistry | null = null;
@@ -10,7 +11,7 @@ const modelRouter = new ModelRouter();
 async function ensureRegistry(): Promise<SkillRegistry> {
   if (!registry) {
     registry = new SkillRegistry();
-    const referencesDir = process.env.REFERENCES_DIR || '../references';
+    const referencesDir = resolveReferencesDir(process.env.REFERENCES_DIR);
     await registry.load(referencesDir);
     engine = new SkillEngine(registry);
   }
@@ -35,9 +36,9 @@ export default async function chatRoutes(app: FastifyInstance) {
 
     // Build system prompt
     let systemPrompt = '';
-    if (skillId && engine) {
+    if (skillId) {
       await ensureRegistry();
-      systemPrompt = engine.buildSystemPrompt(skillId);
+      systemPrompt = engine!.buildSystemPrompt(skillId);
     }
 
     // Call model

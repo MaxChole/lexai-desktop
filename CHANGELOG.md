@@ -16,6 +16,12 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- 修复本地开发环境依赖安装，恢复前后端 `npm run build` / `npm run typecheck` 可用
+- 初始化并同步 `references/` 子模块，确保 Skill/Agent 索引基于真实参考仓库内容
+- 后端统一改为自动解析 `references/` 绝对路径，避免不同启动目录下索引失败
+- 修复 `POST /v1/chat` 首次传入 `skillId` 时不构建 System Prompt 的初始化问题
+- Skill/Agent 查询结果改为稳定排序，并在列表接口返回 `total`
+- Skill 引擎增加基于显式 frontmatter 与插件提示的 `INT` 司法管辖区识别
 - T-01 项目初始化完成：
   - Backend: Node.js 20 + Fastify 4 脚手架，健康检查接口 `/v1/health`
   - Frontend: Electron 28 + Vite + React 18 + Tailwind CSS 脚手架

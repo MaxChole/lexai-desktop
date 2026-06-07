@@ -3,6 +3,12 @@ import path from 'path';
 import YAML from 'yaml';
 import type { SkillMeta, AgentMeta, Jurisdiction } from '../../types/shared.js';
 
+const INT_PLUGIN_HINTS = new Set([
+  'ai-governance-legal',
+  'privacy-legal',
+  'regulatory-legal',
+]);
+
 // ── Frontmatter parser ──
 
 /** Clean description for safe JSON serialization: remove control chars, collapse whitespace */
@@ -33,9 +39,24 @@ function parseFrontmatter(raw: string): { frontmatter: Record<string, unknown>; 
  * claude-for-legal → 'US' (with some 'INT' content)
  * claude-for-legal-ZH → 'CN'
  */
-function jurisdictionFromRepo(repoName: string): Jurisdiction {
+function jurisdictionFromRepo(
+  repoName: string,
+  plugin: string,
+  frontmatter?: Record<string, unknown>,
+): Jurisdiction {
+  const explicitJurisdiction = typeof frontmatter?.jurisdiction === 'string'
+    ? frontmatter.jurisdiction.toUpperCase()
+    : undefined;
+
+  if (explicitJurisdiction === 'CN' || explicitJurisdiction === 'US' || explicitJurisdiction === 'INT') {
+    return explicitJurisdiction;
+  }
+
   if (repoName === 'claude-for-legal-ZH') return 'CN';
-  return 'US'; // default for original repo; some plugins are INT but we'll start as US
+
+  if (INT_PLUGIN_HINTS.has(plugin)) return 'INT';
+
+  return 'US';
 }
 
 /**
@@ -75,8 +96,6 @@ export class SkillRegistry {
         continue;
       }
 
-      const jurisdiction = jurisdictionFromRepo(repo);
-
       // Scan SKILL.md files
       const skillFiles = await this.walkDir(repoRoot, 'SKILL.md');
       for (const filePath of skillFiles) {
@@ -85,6 +104,7 @@ export class SkillRegistry {
           const { frontmatter, body } = parseFrontmatter(raw);
           const plugin = pluginFromPath(filePath, repoRoot);
           const name = (frontmatter.name as string) || path.basename(path.dirname(filePath));
+          const jurisdiction = jurisdictionFromRepo(repo, plugin, frontmatter);
           const id = `${jurisdiction.toLowerCase()}:${plugin}:${name}`;
           const description = cleanDescription((frontmatter.description as string) || '');
 
@@ -112,6 +132,7 @@ export class SkillRegistry {
           const { frontmatter, body } = parseFrontmatter(raw);
           const plugin = pluginFromPath(filePath, repoRoot);
           const name = (frontmatter.name as string) || path.basename(filePath, '.md');
+          const jurisdiction = jurisdictionFromRepo(repo, plugin, frontmatter);
           const id = `${jurisdiction.toLowerCase()}:${plugin}:${name}`;
 
           this.agents.set(id, {
@@ -144,7 +165,7 @@ export class SkillRegistry {
       if (userInvocable !== undefined && skill.userInvocable !== userInvocable) continue;
       results.push(skill);
     }
-    return results;
+    return results.sort((a, b) => a.id.localeCompare(b.id));
   }
 
   /**
@@ -163,7 +184,7 @@ export class SkillRegistry {
       if (jurisdiction && jurisdiction !== 'ALL' && agent.jurisdiction !== jurisdiction) continue;
       results.push(agent);
     }
-    return results;
+    return results.sort((a, b) => a.id.localeCompare(b.id));
   }
 
   /**

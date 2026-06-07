@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { AgentRegistry } from '../services/agent-runner/registry.js';
+import { resolveReferencesDir } from '../services/reference-path.js';
 import type { Jurisdiction } from '../types/shared.js';
 
 let registryInitialized = false;
@@ -7,7 +8,7 @@ let registryInitialized = false;
 async function ensureRegistry(): Promise<AgentRegistry> {
   const registry = AgentRegistry.getInstance();
   if (!registryInitialized) {
-    const referencesDir = process.env.REFERENCES_DIR || '../references';
+    const referencesDir = resolveReferencesDir(process.env.REFERENCES_DIR);
     await registry.init(referencesDir);
     registryInitialized = true;
   }
@@ -38,7 +39,10 @@ export default async function agentRoutes(app: FastifyInstance) {
       type: 'agent', // distinguish from skills
     }));
 
-    return { agents: agentsMeta };
+    return {
+      agents: agentsMeta,
+      total: agentsMeta.length,
+    };
   });
 
   // GET /agents/:agentId — get single agent metadata
