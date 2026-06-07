@@ -11,6 +11,7 @@ import { LocalChatStore } from './local-chat-store.js';
 import { LocalDocumentStore } from './local-document-store.js';
 import { LocalModelManager } from './local-model-manager.js';
 import { LocalSkillEngine } from './local-skill-engine.js';
+import { SecureTokenStore } from './secure-token-store.js';
 
 let mainWindow: BrowserWindow | null = null;
 const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
@@ -22,6 +23,7 @@ const localChatStore = new LocalChatStore(localDbPath);
 const localDocumentStore = new LocalDocumentStore(localDocumentsDir);
 const localModelManager = new LocalModelManager(localModelsDir, process.env.LOCAL_LLM_MODEL_URL);
 const localSkillEngine = new LocalSkillEngine(localProfilesDir);
+const secureTokenStore = new SecureTokenStore();
 const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
   defaults: {
     runtimeMode: 'cloud',
@@ -45,6 +47,12 @@ interface ChatResponsePayload {
     cacheReadTokens?: number;
     cacheCreationTokens?: number;
   };
+}
+
+interface AuthSessionPayload {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number | null;
 }
 
 function getApiBaseUrl(): string {
@@ -118,6 +126,18 @@ ipcMain.handle('runtime-mode:get', async () => {
 ipcMain.handle('runtime-mode:set', async (_event, mode: 'cloud' | 'local') => {
   settingsStore.set('runtimeMode', mode);
   return settingsStore.get('runtimeMode');
+});
+
+ipcMain.handle('auth-session:get', async () => {
+  return secureTokenStore.getSession();
+});
+
+ipcMain.handle('auth-session:set', async (_event, payload: AuthSessionPayload) => {
+  return secureTokenStore.setSession(payload);
+});
+
+ipcMain.handle('auth-session:clear', async () => {
+  return secureTokenStore.clearSession();
 });
 
 ipcMain.handle('practice-profile:get', async (_event, plugin: string) => {

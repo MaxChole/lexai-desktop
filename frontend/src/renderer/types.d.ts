@@ -30,6 +30,12 @@ export interface ManagedLocalModelStatus {
   lastError?: string;
 }
 
+export interface AuthSessionState {
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: number | null;
+}
+
 export interface DesktopChatResponse {
   content: string;
   model: string;
@@ -87,6 +93,11 @@ export interface LexaiBridge {
     startDownload: () => Promise<ManagedLocalModelStatus>;
     pauseDownload: () => Promise<ManagedLocalModelStatus>;
     delete: () => Promise<ManagedLocalModelStatus>;
+  };
+  authSession: {
+    get: () => Promise<AuthSessionState>;
+    set: (payload: AuthSessionState & { accessToken: string }) => Promise<AuthSessionState>;
+    clear: () => Promise<{ ok: true }>;
   };
   runtimeMode: {
     get: () => Promise<'cloud' | 'local'>;

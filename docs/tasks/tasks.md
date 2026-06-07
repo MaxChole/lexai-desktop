@@ -19,7 +19,7 @@ _无_
 | T-01 | 项目初始化：Electron + React + Node.js 脚手架 | 无 | done |
 | T-02 | Skill 引擎：解析并索引两个仓库的全部 SKILL.md | T-01 | done |
 | T-03 | 多模型路由层：Claude / DeepSeek / Kimi 统一接口 | T-01 | done |
-| T-04 | 用户认证与 Stripe 订阅计费 | T-01 | pending |
+| T-04 | 用户认证与 Stripe 订阅计费 | T-01 | done |
 
 ### 阶段 2 — 核心功能
 

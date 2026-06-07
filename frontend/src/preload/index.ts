@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('lexai', {
     pauseDownload: () => ipcRenderer.invoke('local-model:pause-download'),
     delete: () => ipcRenderer.invoke('local-model:delete'),
   },
+  authSession: {
+    get: () => ipcRenderer.invoke('auth-session:get'),
+    set: (payload: { accessToken: string; refreshToken?: string; expiresAt?: number | null }) => ipcRenderer.invoke('auth-session:set', payload),
+    clear: () => ipcRenderer.invoke('auth-session:clear'),
+  },
   runtimeMode: {
     get: () => ipcRenderer.invoke('runtime-mode:get'),
     set: (mode: 'cloud' | 'local') => ipcRenderer.invoke('runtime-mode:set', mode),

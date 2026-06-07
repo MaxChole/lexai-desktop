@@ -16,6 +16,7 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- T-04 认证与计费开始落地：后端新增 Supabase 邮箱注册/登录/当前用户接口、Stripe 订阅接口与 webhook 路由，Electron Main 新增本地加密会话令牌存储桥接
 - 本地模式会话元数据已切到 SQLite：Electron Main 现在把本地会话、消息和附件索引写入 `userData/local.db`，附件内容仍存本地文件系统
 - 本地模型管理面板已接入：支持查看 Qwen2.5-7B 安装状态、下载进度、速度、剩余时间、RAM 警告，以及下载/暂停/删除操作
 - 本地模式发送链路已开始利用本地附件：会话中绑定的文件会在生成时自动注入附件上下文，TXT/Markdown 提供文本片段，二进制文档提供元数据说明
