@@ -9,7 +9,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist/main",
-    "rootDir": "src/main"
+    "rootDir": "src/main",
+    "types": ["node", "electron"]
   },
   "include": ["src/main"]
 }

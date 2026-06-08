@@ -36,7 +36,7 @@ _无_
 
 | # | 任务 | 依赖 | 状态 |
 |---|------|------|------|
-| T-10 | Electron 打包分发：macOS + Windows + 自动更新 | T-05~T-09 | pending |
+| T-10 | Electron 打包分发：macOS + Windows + 自动更新 | T-05~T-09 | done |
 
 ---
 

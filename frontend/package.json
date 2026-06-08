@@ -11,6 +11,9 @@
     "build:main": "tsc -p tsconfig.main.json && node -e \"require('fs').mkdirSync('dist/main',{recursive:true}); require('fs').writeFileSync('dist/main/package.json', JSON.stringify({type:'commonjs'}));\"",
     "build:preload": "tsc -p tsconfig.preload.json && node -e \"require('fs').mkdirSync('dist/preload',{recursive:true}); require('fs').writeFileSync('dist/preload/package.json', JSON.stringify({type:'commonjs'}));\"",
     "build": "npm run build:main && npm run build:preload && vite build",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg --universal --publish always",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish always",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
@@ -22,6 +25,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "electron-store": "^8.1.0",
     "prismjs": "^1.30.0",
     "react": "^18.3.1",
@@ -30,6 +34,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "@types/node": "^22.13.4",
     "@types/prismjs": "^1.26.6",
     "@types/react": "^18.3.18",
@@ -44,5 +49,65 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vite": "^5.4.14"
+  },
+  "build": {
+    "appId": "app.lexai.desktop",
+    "productName": "LexAI Desktop",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "!node_modules/.cache/**/*"
+    ],
+    "extraMetadata": {
+      "main": "dist/main/index.js"
+    },
+    "asar": true,
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.inherit.plist"
+    },
+    "dmg": {
+      "artifactName": "LexAI-Desktop-${version}-mac-universal.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "LexAI-Desktop-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "MaxChole",
+        "repo": "lexai-desktop"
+      }
+    ],
+    "afterSign": "scripts/notarize.cjs"
   }
 }

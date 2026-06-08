@@ -9,7 +9,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist/preload",
-    "rootDir": "src/preload"
+    "rootDir": "src/preload",
+    "types": ["node", "electron"]
   },
   "include": ["src/preload"]
 }

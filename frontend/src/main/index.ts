@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import fs from 'fs';
 import Store from 'electron-store';
 import path from 'path';
@@ -14,6 +15,17 @@ import { LocalSkillEngine } from './local-skill-engine.js';
 import { SecureTokenStore } from './secure-token-store.js';
 
 let mainWindow: BrowserWindow | null = null;
+let updateStatus: {
+  checking: boolean;
+  available: boolean;
+  downloaded: boolean;
+  version?: string;
+  error?: string;
+} = {
+  checking: false,
+  available: false,
+  downloaded: false,
+};
 const localInferenceSidecar = new LocalInferenceSidecar(loadLocalInferenceConfig());
 const localProfilesDir = path.join(app.getPath('userData'), 'practice-profiles');
 const localDocumentsDir = path.join(app.getPath('userData'), 'local-documents');
@@ -230,6 +242,71 @@ async function syncDesktopNotifications(): Promise<void> {
   }
 }
 
+function broadcastUpdateStatus() {
+  mainWindow?.webContents.send('app-update:status', updateStatus);
+}
+
+function initAutoUpdater() {
+  if (process.env.NODE_ENV === 'development') {
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    updateStatus = { checking: true, available: false, downloaded: false };
+    broadcastUpdateStatus();
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    updateStatus = {
+      checking: false,
+      available: true,
+      downloaded: false,
+      version: info.version,
+    };
+    broadcastUpdateStatus();
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'LexAI 更新可用',
+        body: `正在下载 ${info.version}`,
+      }).show();
+    }
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    updateStatus = { checking: false, available: false, downloaded: false };
+    broadcastUpdateStatus();
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    updateStatus = {
+      checking: false,
+      available: true,
+      downloaded: true,
+      version: info.version,
+    };
+    broadcastUpdateStatus();
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'LexAI 更新已下载',
+        body: '退出应用后将自动安装更新。',
+      }).show();
+    }
+  });
+
+  autoUpdater.on('error', (error) => {
+    updateStatus = {
+      checking: false,
+      available: false,
+      downloaded: false,
+      error: error.message,
+    };
+    broadcastUpdateStatus();
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -268,6 +345,19 @@ ipcMain.handle('api:health', async () => {
   } catch (err) {
     return { status: 'error', message: String(err) };
   }
+});
+
+ipcMain.handle('app-update:get-status', async () => updateStatus);
+
+ipcMain.handle('app-update:check', async () => {
+  if (process.env.NODE_ENV === 'development') {
+    return {
+      ...updateStatus,
+      error: 'Auto update is disabled in development',
+    };
+  }
+  await autoUpdater.checkForUpdates();
+  return updateStatus;
 });
 
 ipcMain.handle('local-inference:status', async () => {
@@ -723,9 +813,23 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
 });
 
 app.whenReady().then(async () => {
+  initAutoUpdater();
   await localInferenceSidecar.start();
   createWindow();
   void syncDesktopNotifications();
+  if (process.env.NODE_ENV !== 'development') {
+    setTimeout(() => {
+      void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+        updateStatus = {
+          checking: false,
+          available: false,
+          downloaded: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        broadcastUpdateStatus();
+      });
+    }, 5000);
+  }
   setInterval(() => {
     void syncDesktopNotifications();
   }, 15000);
