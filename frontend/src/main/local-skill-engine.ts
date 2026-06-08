@@ -10,6 +10,18 @@ const INT_PLUGIN_HINTS = new Set([
 interface ParsedFrontmatter {
   name?: string;
   jurisdiction?: string;
+  cnSkillRef?: string;
+  usSkillRef?: string;
+}
+
+interface LocalSkillDefinition {
+  id: string;
+  plugin: string;
+  name: string;
+  jurisdiction: string;
+  body: string;
+  cnSkillRef?: string;
+  usSkillRef?: string;
 }
 
 function resolveReferencesDir(): string {
@@ -19,6 +31,10 @@ function resolveReferencesDir(): string {
   ];
 
   return candidates[0];
+}
+
+function resolveCrossSkillsDir(): string {
+  return path.resolve(process.cwd(), 'skills');
 }
 
 function parseFrontmatter(raw: string): { frontmatter: ParsedFrontmatter; body: string } {
@@ -41,6 +57,16 @@ function parseFrontmatter(raw: string): { frontmatter: ParsedFrontmatter; body: 
     const jurisdictionMatch = line.match(/^jurisdiction:\s*(.+)$/);
     if (jurisdictionMatch) {
       frontmatter.jurisdiction = jurisdictionMatch[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    const cnSkillRefMatch = line.match(/^cn-skill-ref:\s*(.+)$/);
+    if (cnSkillRefMatch) {
+      frontmatter.cnSkillRef = cnSkillRefMatch[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    const usSkillRefMatch = line.match(/^us-skill-ref:\s*(.+)$/);
+    if (usSkillRefMatch) {
+      frontmatter.usSkillRef = usSkillRefMatch[1].trim().replace(/^['"]|['"]$/g, '');
     }
   }
 
@@ -86,10 +112,54 @@ export class LocalSkillEngine {
   }
 
   async buildSystemPrompt(skillId: string): Promise<string> {
+    const definition = await this.getSkillDefinition(skillId);
+    const practiceProfile = await this.loadPracticeProfileForSkill(definition);
+    const prompt = practiceProfile
+      ? `${definition.body}\n\n---\n\n# Practice Profile\n\n${practiceProfile}`
+      : definition.body;
+    this.promptCache.set(skillId, prompt);
+    return prompt;
+  }
+
+  async getSkillDefinition(skillId: string): Promise<LocalSkillDefinition> {
     const cached = this.promptCache.get(skillId);
-    if (cached) return cached;
+    if (cached) {
+      const [jurisdiction, plugin, name] = skillId.split(':');
+      return {
+        id: skillId,
+        plugin,
+        name,
+        jurisdiction: jurisdiction.toUpperCase(),
+        body: cached,
+      };
+    }
 
     const [prefix, plugin, skillName] = skillId.split(':');
+    if (prefix === 'cross') {
+      const crossRoot = resolveCrossSkillsDir();
+      const skillFiles = await walkDir(path.join(crossRoot, plugin), 'SKILL.md');
+
+      for (const filePath of skillFiles) {
+        const raw = await fs.readFile(filePath, 'utf-8');
+        const { frontmatter, body } = parseFrontmatter(raw);
+        const resolvedName = frontmatter.name || path.basename(path.dirname(filePath));
+        const candidateId = `cross:${plugin}:${resolvedName}`;
+        if (candidateId === skillId) {
+          return {
+            id: skillId,
+            plugin,
+            name: resolvedName,
+            jurisdiction: 'CROSS',
+            body,
+            cnSkillRef: frontmatter.cnSkillRef,
+            usSkillRef: frontmatter.usSkillRef,
+          };
+        }
+      }
+
+      throw new Error(`Local cross skill prompt not found: ${skillId}`);
+    }
+
     const repoName = prefix === 'cn' ? 'claude-for-legal-ZH' : 'claude-for-legal';
     const repoRoot = path.join(resolveReferencesDir(), repoName);
     const skillFiles = await walkDir(path.join(repoRoot, plugin), 'SKILL.md');
@@ -101,16 +171,51 @@ export class LocalSkillEngine {
       const jurisdiction = jurisdictionFromRepo(repoName, plugin, frontmatter).toLowerCase();
       const candidateId = `${jurisdiction}:${plugin}:${resolvedName}`;
       if (candidateId === skillId) {
-        const practiceProfile = await this.loadPracticeProfile(repoRoot, plugin);
-        const prompt = practiceProfile
-          ? `${body}\n\n---\n\n# Practice Profile\n\n${practiceProfile}`
-          : body;
-        this.promptCache.set(skillId, prompt);
-        return prompt;
+        return {
+          id: skillId,
+          plugin,
+          name: resolvedName,
+          jurisdiction: jurisdiction.toUpperCase(),
+          body,
+        };
       }
     }
 
     throw new Error(`Local skill prompt not found: ${skillId}`);
+  }
+
+  async buildCrossComparison(skillId: string, userMessage: string, cnContent: string, usContent: string): Promise<string> {
+    const definition = await this.getSkillDefinition(skillId);
+    return [
+      `# ${definition.name}`,
+      '',
+      `> 对照任务：${userMessage}`,
+      '',
+      '## 使用说明',
+      '- 以下内容按中国法与美国法分别展开，便于逐项对照。',
+      '- 这是对照输出，不是融合结论。',
+      '',
+      '## 中国法视角',
+      cnContent.trim(),
+      '',
+      '## 美国法视角',
+      usContent.trim(),
+      '',
+      '## 对照提醒',
+      '- 优先核对两法域结论是否冲突、适用门槛是否不同、还缺哪些事实。',
+      '- 如任一部分出现 `[需验证]` 或 `[verify]`，请回到原始法条或判例逐项复核。',
+    ].join('\n');
+  }
+
+  private async loadPracticeProfileForSkill(definition: LocalSkillDefinition): Promise<string | undefined> {
+    if (definition.jurisdiction === 'CROSS') {
+      return undefined;
+    }
+    const repoRoot = path.join(
+      resolveReferencesDir(),
+      definition.id.startsWith('cn:') ? 'claude-for-legal-ZH' : 'claude-for-legal',
+    );
+    return this.loadPracticeProfile(repoRoot, definition.plugin);
   }
 
   private async loadPracticeProfile(repoRoot: string, plugin: string): Promise<string | undefined> {

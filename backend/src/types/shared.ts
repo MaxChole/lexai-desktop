@@ -12,6 +12,8 @@ export interface SkillMeta {
   userInvocable: boolean;
   filePath: string;
   systemPromptRaw: string;
+  cnSkillRef?: string;
+  usSkillRef?: string;
 }
 
 export interface AgentMeta {

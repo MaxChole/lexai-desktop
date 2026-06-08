@@ -715,6 +715,84 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       throw new Error('Local inference runtime is not configured');
     }
 
+    const skillDefinition = payload.skillId
+      ? await localSkillEngine.getSkillDefinition(payload.skillId)
+      : null;
+
+    if (skillDefinition?.jurisdiction === 'CROSS' && skillDefinition.cnSkillRef && skillDefinition.usSkillRef) {
+      const [cnPrompt, usPrompt] = await Promise.all([
+        localSkillEngine.buildSystemPrompt(skillDefinition.cnSkillRef),
+        localSkillEngine.buildSystemPrompt(skillDefinition.usSkillRef),
+      ]);
+      const [cnResponse, usResponse] = await Promise.all([cnPrompt, usPrompt].map(async (systemPrompt) => {
+        const response = await fetch(`${localStatus.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: localStatus.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: payload.message },
+            ],
+            max_tokens: 4096,
+            stream: false,
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Local inference API error: ${response.status} ${errText}`);
+        }
+
+        return await response.json() as {
+          choices: Array<{ message: { content: string } }>;
+          model?: string;
+          usage?: { prompt_tokens?: number; completion_tokens?: number };
+        };
+      }));
+
+      const mergedContent = await localSkillEngine.buildCrossComparison(
+        payload.skillId!,
+        payload.message,
+        cnResponse.choices[0]?.message?.content || '',
+        usResponse.choices[0]?.message?.content || '',
+      );
+
+      const chatResponse: ChatResponsePayload = {
+        content: mergedContent,
+        model: `compare:${localStatus.model}`,
+        provider: 'cross-compare',
+        usage: {
+          inputTokens: (cnResponse.usage?.prompt_tokens || 0) + (usResponse.usage?.prompt_tokens || 0),
+          outputTokens: (cnResponse.usage?.completion_tokens || 0) + (usResponse.usage?.completion_tokens || 0),
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+        },
+      };
+
+      const conversation = await localChatStore.saveExchange({
+        conversationId: payload.conversationId,
+        skillId: payload.skillId,
+        userMessage: {
+          role: 'user',
+          content: payload.message,
+          meta: `skill · ${payload.skillId}`,
+        },
+        assistantMessage: {
+          role: 'assistant',
+          content: chatResponse.content,
+          meta: `${chatResponse.provider} · ${chatResponse.model}`,
+        },
+      });
+
+      return {
+        ...chatResponse,
+        conversationId: conversation.id,
+      };
+    }
+
     const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
     if (payload.skillId) {
       const systemPrompt = await localSkillEngine.buildSystemPrompt(payload.skillId);

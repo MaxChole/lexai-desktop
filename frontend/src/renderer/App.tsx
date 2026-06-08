@@ -454,7 +454,7 @@ function App() {
     CN: 'CN 中国法',
     US: 'US 美国法',
     INT: 'INT 国际法',
-    CROSS: 'CROSS 融合',
+    CROSS: 'CROSS 对照',
     ALL: '全部',
   };
 
@@ -898,7 +898,7 @@ function App() {
 
         <div className="px-4 pb-2">
           <div className="mb-2 text-xs text-lexai-muted">法律体系</div>
-          {(['CN', 'US', 'INT', 'ALL'] as Jurisdiction[]).map((item) => (
+          {(['CN', 'US', 'INT', 'CROSS', 'ALL'] as Jurisdiction[]).map((item) => (
             <button
               key={item}
               onClick={() => setJurisdiction(item)}

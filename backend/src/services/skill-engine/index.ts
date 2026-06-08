@@ -75,6 +75,10 @@ function pluginFromPath(filePath: string, repoRoot: string): string {
   return parts[0];
 }
 
+function resolveCrossSkillsRoot(): string {
+  return path.resolve(process.cwd(), 'skills');
+}
+
 // ── SkillRegistry ──
 
 export class SkillRegistry {
@@ -151,6 +155,8 @@ export class SkillRegistry {
         }
       }
     }
+
+    await this.loadCrossSkills();
 
     console.log(`SkillRegistry loaded: ${this.skills.size} skills, ${this.agents.size} agents`);
   }
@@ -246,6 +252,43 @@ export class SkillRegistry {
     }
     return results;
   }
+
+  private async loadCrossSkills(): Promise<void> {
+    const crossRoot = resolveCrossSkillsRoot();
+    try {
+      await fs.access(crossRoot);
+    } catch {
+      return;
+    }
+
+    const skillFiles = await this.walkDir(crossRoot, 'SKILL.md');
+    for (const filePath of skillFiles) {
+      try {
+        const raw = await fs.readFile(filePath, 'utf-8');
+        const { frontmatter, body } = parseFrontmatter(raw);
+        const plugin = pluginFromPath(filePath, crossRoot);
+        const name = (frontmatter.name as string) || path.basename(path.dirname(filePath));
+        const id = `cross:${plugin}:${name}`;
+        const description = cleanDescription((frontmatter.description as string) || '');
+
+        this.skills.set(id, {
+          id,
+          name,
+          plugin,
+          jurisdiction: 'CROSS',
+          description,
+          argumentHint: frontmatter['argument-hint'] as string | undefined,
+          userInvocable: frontmatter['user-invocable'] !== false,
+          filePath,
+          systemPromptRaw: body,
+          cnSkillRef: frontmatter['cn-skill-ref'] as string | undefined,
+          usSkillRef: frontmatter['us-skill-ref'] as string | undefined,
+        });
+      } catch (err) {
+        console.warn(`Failed to parse cross skill ${filePath}:`, err);
+      }
+    }
+  }
 }
 
 // ── SkillEngine ──
@@ -275,6 +318,52 @@ export class SkillEngine {
     }
 
     return prompt;
+  }
+
+  getCrossSkillRefs(skillId: string): { cnSkillRef: string; usSkillRef: string } {
+    const skill = this.registry.getSkill(skillId);
+    if (!skill || skill.jurisdiction !== 'CROSS' || !skill.cnSkillRef || !skill.usSkillRef) {
+      throw new Error(`Cross skill refs not found: ${skillId}`);
+    }
+
+    return {
+      cnSkillRef: skill.cnSkillRef,
+      usSkillRef: skill.usSkillRef,
+    };
+  }
+
+  formatCrossComparison(input: {
+    skillId: string;
+    userMessage: string;
+    cnTitle: string;
+    usTitle: string;
+    cnContent: string;
+    usContent: string;
+  }): string {
+    const skill = this.registry.getSkill(input.skillId);
+    if (!skill) {
+      throw new Error(`Skill not found: ${input.skillId}`);
+    }
+
+    return [
+      `# ${skill.name}`,
+      '',
+      `> 对照任务：${input.userMessage}`,
+      '',
+      '## 使用说明',
+      '- 以下内容按中国法与美国法分别展开，便于律师逐项对照。',
+      '- 这不是单一融合结论；如两法域结论冲突，请结合交易结构、适用法律条款和事实背景进一步判断。',
+      '',
+      `## ${input.cnTitle}`,
+      input.cnContent.trim(),
+      '',
+      `## ${input.usTitle}`,
+      input.usContent.trim(),
+      '',
+      '## 对照提醒',
+      '- 优先关注两边结论是否冲突、触发条件是否不同、以及还缺哪些事实才能下结论。',
+      '- 如任一部分出现 `[需验证]` 或 `[verify]`，请回到原始法条、判例、监管材料逐项复核。',
+    ].join('\n');
   }
 
   /**

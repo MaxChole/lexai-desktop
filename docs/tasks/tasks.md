@@ -26,7 +26,7 @@ _无_
 | # | 任务 | 依赖 | 状态 |
 |---|------|------|------|
 | T-05 | 核心对话 UI：Slash Command 补全 + 法律体系切换 | T-02, T-03 | done |
-| T-06 | 跨体系融合 Skills：6 个中美双体系对比 Skill | T-02, T-03 | pending |
+| T-06 | 跨法域对照 Skills：6 个中美双体系对照 Skill | T-02, T-03 | done |
 | T-07 | 案件与文档管理：案件库 + 文档上传 + 会话历史搜索 | T-04, T-05 | done |
 | T-08 | 定时 Agent 面板：后台任务调度 + 桌面通知 | T-03, T-05 | done |
 | T-09 | 用量追踪与配额管理：Token 计量 + 超限控制 | T-03, T-04 | done |
@@ -117,7 +117,7 @@ _无_
 
 **包含:**
 - 对话消息列表（Markdown 渲染、代码高亮）
-- 侧边栏法律体系切换（CN / US / 双体系融合）
+- 侧边栏法律体系切换（CN / US / 跨法域对照）
 - 输入框 `/` 触发 Slash Command 补全菜单（按体系过滤）
 - 文件拖拽上传（PDF/Word/TXT）
 - `[需验证]` / `[verify]` 标记高亮
@@ -126,9 +126,9 @@ _无_
 
 ---
 
-### T-06 — 跨体系融合 Skills
+### T-06 — 跨法域对照 Skills
 
-**目标:** 自研 6 个 CROSS jurisdiction 融合 Skill
+**目标:** 自研 6 个 CROSS jurisdiction 对照 Skill
 
 **Skill 列表:**
 1. `cross:cn-us-contract-review` — 中美合同双体系审查
@@ -138,7 +138,7 @@ _无_
 5. `cross:cross-border-labor` — 跨境劳动合规对比
 6. `cross:dispute-resolution` — 跨境争议解决策略
 
-每个 Skill 并行调用 CN + US System Prompt，输出双栏对比格式。
+每个 Skill 并行调用 CN + US System Prompt，输出双栏对照格式，而不是融合成单一结论。
 
 ---
 

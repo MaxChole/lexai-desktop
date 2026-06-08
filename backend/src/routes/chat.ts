@@ -39,11 +39,61 @@ export default async function chatRoutes(app: FastifyInstance) {
       });
     }
 
-    // Build system prompt
     let systemPrompt = '';
+    let crossCompareResult:
+      | {
+          content: string;
+          model: string;
+          provider: string;
+          inputTokens: number;
+          outputTokens: number;
+          cacheReadTokens: number;
+          cacheCreationTokens: number;
+        }
+      | null = null;
     if (skillId) {
-      await ensureRegistry();
-      systemPrompt = engine!.buildSystemPrompt(skillId);
+      const reg = await ensureRegistry();
+      const skill = reg.getSkill(skillId);
+      if (skill?.jurisdiction === 'CROSS') {
+        const { cnSkillRef, usSkillRef } = engine!.getCrossSkillRefs(skillId);
+        const [cnResult, usResult] = await Promise.all([
+          modelRouter.call(
+            {
+              messages: [{ role: 'user', content: message }],
+              systemPrompt: engine!.buildSystemPrompt(cnSkillRef),
+              cacheControl: true,
+            },
+            plan || 'starter',
+          ),
+          modelRouter.call(
+            {
+              messages: [{ role: 'user', content: message }],
+              systemPrompt: engine!.buildSystemPrompt(usSkillRef),
+              cacheControl: true,
+            },
+            plan || 'starter',
+          ),
+        ]);
+
+        crossCompareResult = {
+          content: engine!.formatCrossComparison({
+            skillId,
+            userMessage: message,
+            cnTitle: '中国法视角',
+            usTitle: '美国法视角',
+            cnContent: cnResult.content,
+            usContent: usResult.content,
+          }),
+          model: `compare:${cnResult.model}|${usResult.model}`,
+          provider: 'cross-compare',
+          inputTokens: cnResult.inputTokens + usResult.inputTokens,
+          outputTokens: cnResult.outputTokens + usResult.outputTokens,
+          cacheReadTokens: cnResult.cacheReadTokens + usResult.cacheReadTokens,
+          cacheCreationTokens: cnResult.cacheCreationTokens + usResult.cacheCreationTokens,
+        };
+      } else {
+        systemPrompt = engine!.buildSystemPrompt(skillId);
+      }
     }
 
     const token = readBearerToken(request.headers.authorization);
@@ -52,7 +102,7 @@ export default async function chatRoutes(app: FastifyInstance) {
       : null;
 
     // Call model
-    const result = await modelRouter.call(
+    const result = crossCompareResult ?? await modelRouter.call(
       {
         messages: [{ role: 'user', content: message }],
         systemPrompt,

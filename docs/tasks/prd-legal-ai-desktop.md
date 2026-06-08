@@ -35,7 +35,7 @@
 
 - **G-1:** 上线后 6 个月内，月活付费用户 ≥ 500。
 - **G-2:** 用户完成一次完整法律任务（合同审查/起草/风险分析）平均耗时 ≤ 15 分钟。
-- **G-3:** 两个仓库的 Skill 覆盖率各自 100%，自研跨体系融合 Skill ≥ 6 个。
+- **G-3:** 两个仓库的 Skill 覆盖率各自 100%，自研跨法域对照 Skill ≥ 6 个。
 - **G-4:** 月续订率 ≥ 70%。
 - **G-5:** 本地模式支持主流硬件（≥ 16GB RAM），7B 模型响应首 token ≤ 15 秒（CPU-only）。
 
@@ -70,9 +70,9 @@
 作为用户，我想在中国法律体系和国际法律体系之间切换，以便处理不同管辖区事务。
 
 验收标准：
-- 侧边栏顶部显示当前体系（中国法 / 国际法 / 双体系融合）
+- 侧边栏顶部显示当前体系（中国法 / 国际法 / 跨法域对照）
 - 切换后 Slash Command 菜单立即更新为对应体系的 Skills
-- 双体系融合模式下，`CROSS` Skill 同时可用
+- 跨法域对照模式下，`CROSS` Skill 同时可用
 - 切换不中断当前对话
 - Verify in browser using dev-browser skill
 
@@ -113,12 +113,12 @@
 
 ---
 
-**US-006: 跨体系融合 Skill**
-作为跨境法务，我想使用"中美合同对比审查"同时获得两个体系的风险分析。
+**US-006: 跨体系对照 Skill**
+作为跨境法务，我想使用"中美合同对照审查"同时获得两个体系的风险分析。
 
 验收标准：
-- 融合 Skill 在命令菜单有独立分类"跨体系融合"
-- SkillEngine 并行调用 CN + US System Prompt，输出双栏对比报告
+- CROSS Skill 在命令菜单有独立分类"跨法域对照"
+- SkillEngine 并行调用 CN + US System Prompt，输出双栏对照报告
 - 报告分别标注中国法依据和美国法依据
 - 可导出为 Word 或 PDF
 
@@ -190,9 +190,9 @@
 - 注入用户的 Practice Profile（对应原始仓库的 `CLAUDE.md` 配置）
 - 按 jurisdiction 标签索引（CN / US / INT / CROSS）
 
-**FR-6:** Slash Command 补全菜单按当前法律体系过滤 `user-invocable: true` 的 Skills。双体系融合模式显示全部。
+**FR-6:** Slash Command 补全菜单按当前法律体系过滤 `user-invocable: true` 的 Skills。跨法域对照模式显示 `CROSS` Skills。
 
-**FR-7:** 自研 6 个跨体系融合 Skill（jurisdiction: CROSS），并行调用 CN + US System Prompt，输出双栏对比：
+**FR-7:** 自研 6 个跨法域对照 Skill（jurisdiction: CROSS），并行调用 CN + US System Prompt，输出双栏对照：
 1. 中美合同双体系审查
 2. 中美数据合规对比（PIPL vs GDPR/CCPA）
 3. 跨境并购尽职调查
@@ -342,7 +342,7 @@ Skill System Prompt（通常 2000-8000 tokens）作为缓存前缀，对同一 S
 | # | 问题 | 优先级 |
 |---|------|-------|
 | OQ-1 | MCP 连接器（元典、Westlaw）是平台统一采购还是用户自己配账号？ | 高 |
-| OQ-2 | 跨境融合 Skill 内容是否需要法律专业人士审定？ | 高 |
+| OQ-2 | 跨法域对照 Skill 内容是否需要法律专业人士审定？ | 高 |
 | OQ-3 | 法律文档存储是否需要等保认证或 SOC 2？ | 中 |
 | OQ-4 | 用量超限后是否允许按量付费超额，还是硬停止？ | 中 |
 | OQ-5 | 企业版管理后台是独立 Web 还是集成在 Electron 内？ | 中 |

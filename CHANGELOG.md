@@ -16,6 +16,7 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- T-06 从“融合答案”调整为“跨法域对照”工作流：新增 6 个 `CROSS` skills，SkillRegistry 支持加载本地 cross skills，云端与本地模式都会对 CN / US 两套 prompts 并行分析后按固定双栏模板输出
 - T-10 打包分发链路已接入：前端新增 electron-builder / electron-updater 发布配置、macOS entitlements 与 notarize 脚本、GitHub Actions 打包工作流，并在 Electron Main 中接入生产环境自动更新检查
 - T-08 定时 Agent 面板已落地：后端新增 Agent 配置与手动运行接口、通知读取接口和调度同步，Electron Main 新增桌面通知轮询，前端补充 Agent 面板、启停开关、立即执行和消息中心
 - T-07 案件与文档管理已接入首个完整闭环：后端新增 `cases/documents/sessions` 数据层与案件搜索接口，云端聊天可绑定案件并写入会话历史，前端新增案件库、文档登记上传、案件内会话筛选与离线缓存

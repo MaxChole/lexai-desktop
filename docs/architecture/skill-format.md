@@ -134,7 +134,7 @@ confirm_routing: true/false
 | `CN` | claude-for-legal-ZH | 中国法律体系 |
 | `US` | claude-for-legal（US 专属部分） | 美国法律 |
 | `INT` | claude-for-legal（国际部分） | 国际法 |
-| `CROSS` | 自研 | 跨体系融合（同时调用 CN + US） |
+| `CROSS` | 自研 | 跨法域对照（同时调用 CN + US） |
 
 ### Skill ID 命名规则
 
@@ -189,7 +189,7 @@ interface AgentMeta {
 
 ## 5. CROSS Skill 格式
 
-跨体系融合 Skill 格式与普通 Skill 相同，但执行时特殊处理：
+跨法域对照 Skill 格式与普通 Skill 相同，但执行时特殊处理：
 
 ```yaml
 ---
@@ -204,4 +204,5 @@ us-skill-ref: us:commercial-legal:review    # 引用的 US Skill
 ---
 ```
 
-执行时 SkillEngine 并行发起两个 LLM 请求，合并结果为双栏对比格式后返回。
+执行时 SkillEngine 并行发起两个 LLM 请求，并按固定模板返回双栏对照格式。
+这里的目标是“对照”，不是把两套法域揉成一个融合结论。
