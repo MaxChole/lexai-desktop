@@ -115,7 +115,16 @@ export class LocalInferenceSidecar {
 
     this.child.stderr.on('data', (chunk) => {
       const message = chunk.toString().trim();
-      this.lastError = message || this.lastError;
+      if (!message) {
+        return;
+      }
+
+      if (/^INFO:\s+/i.test(message)) {
+        console.log(`[local-llm] ${message}`);
+        return;
+      }
+
+      this.lastError = message;
       console.warn(`[local-llm] ${message}`);
     });
 
@@ -134,6 +143,9 @@ export class LocalInferenceSidecar {
   async healthcheck(): Promise<boolean> {
     try {
       const response = await fetch(new URL(this.config.healthPath, this.config.baseUrl).toString());
+      if (response.ok) {
+        this.lastError = undefined;
+      }
       return response.ok;
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);

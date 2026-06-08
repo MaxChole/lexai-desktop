@@ -57,6 +57,7 @@ function loadDesktopEnv(): void {
 }
 
 loadDesktopEnv();
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 let mainWindow: BrowserWindow | null = null;
 let updateStatus: {
@@ -291,7 +292,7 @@ function broadcastUpdateStatus() {
 }
 
 function initAutoUpdater() {
-  if (process.env.NODE_ENV === 'development') {
+  if (isDevelopment) {
     return;
   }
 
@@ -366,8 +367,8 @@ function createWindow() {
     },
   });
 
-  // In development, load from Vite dev server
-  if (process.env.NODE_ENV === 'development') {
+  // In development, load from the Vite dev server.
+  if (isDevelopment) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
@@ -394,7 +395,7 @@ ipcMain.handle('api:health', async () => {
 ipcMain.handle('app-update:get-status', async () => updateStatus);
 
 ipcMain.handle('app-update:check', async () => {
-  if (process.env.NODE_ENV === 'development') {
+  if (isDevelopment) {
     return {
       ...updateStatus,
       error: 'Auto update is disabled in development',
@@ -939,7 +940,7 @@ app.whenReady().then(async () => {
   await localInferenceSidecar.start();
   createWindow();
   void syncDesktopNotifications();
-  if (process.env.NODE_ENV !== 'development') {
+  if (!isDevelopment) {
     setTimeout(() => {
       void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
         updateStatus = {

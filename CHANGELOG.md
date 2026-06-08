@@ -19,6 +19,8 @@
 - 本地 embedded runtime 现在支持带引号和空格路径的 `LOCAL_LLM_ARGS`，并完成基于 ModelScope + `llama-cpp-python` 的本地 Qwen2.5-7B 模型下载与测试接线
 - Electron Main 在桌面端开发模式下会主动读取项目根目录 `.env`，避免本地推理 sidecar 配置已填写却未生效
 - 本地推理 sidecar 启动时会隔离并覆盖子进程的 `HOST/PORT`，避免被项目根 `.env` 中的后端端口配置误导到 `3001`
+- Electron 开发脚本现在显式注入 `NODE_ENV=development`，主进程也统一基于该标记加载 Vite dev server，避免 `npm run dev` 误打开旧的 `dist` 页面
+- 本地推理 sidecar 不再把 Uvicorn 的常规 `INFO:` 日志误记为错误，健康检查成功后也会清空旧错误提示，避免桌面端把运行成功状态显示成红色报错
 - T-06 从“融合答案”调整为“跨法域对照”工作流：新增 6 个 `CROSS` skills，SkillRegistry 支持加载本地 cross skills，云端与本地模式都会对 CN / US 两套 prompts 并行分析后按固定双栏模板输出
 - T-10 打包分发链路已接入：前端新增 electron-builder / electron-updater 发布配置、macOS entitlements 与 notarize 脚本、GitHub Actions 打包工作流，并在 Electron Main 中接入生产环境自动更新检查
 - T-08 定时 Agent 面板已落地：后端新增 Agent 配置与手动运行接口、通知读取接口和调度同步，Electron Main 新增桌面通知轮询，前端补充 Agent 面板、启停开关、立即执行和消息中心
