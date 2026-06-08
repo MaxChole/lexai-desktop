@@ -14,6 +14,50 @@ import { LocalModelManager } from './local-model-manager.js';
 import { LocalSkillEngine } from './local-skill-engine.js';
 import { SecureTokenStore } from './secure-token-store.js';
 
+function loadDesktopEnv(): void {
+  const envCandidates = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '..', '.env'),
+  ];
+
+  for (const envPath of envCandidates) {
+    if (!fs.existsSync(envPath)) {
+      continue;
+    }
+
+    const raw = fs.readFileSync(envPath, 'utf-8');
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) {
+        continue;
+      }
+
+      const separatorIndex = trimmed.indexOf('=');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const key = trimmed.slice(0, separatorIndex).trim();
+      if (!key || process.env[key] !== undefined) {
+        continue;
+      }
+
+      let value = trimmed.slice(separatorIndex + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"'))
+        || (value.startsWith('\'') && value.endsWith('\''))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      process.env[key] = value;
+    }
+    return;
+  }
+}
+
+loadDesktopEnv();
+
 let mainWindow: BrowserWindow | null = null;
 let updateStatus: {
   checking: boolean;

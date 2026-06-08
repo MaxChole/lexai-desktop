@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import { URL } from 'url';
 
 export interface LocalInferenceConfig {
   executablePath?: string;
@@ -23,7 +24,54 @@ export interface LocalInferenceStatus {
 
 function parseArgs(raw: string | undefined): string[] {
   if (!raw) return [];
-  return raw.split(' ').map((part) => part.trim()).filter(Boolean);
+
+  const args: string[] = [];
+  let current = '';
+  let quote: '"' | '\'' | null = null;
+  let escaping = false;
+
+  for (const char of raw) {
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaping = true;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === '\'') {
+      quote = char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current) {
+    args.push(current);
+  }
+
+  return args;
 }
 
 export function loadLocalInferenceConfig(): LocalInferenceConfig {
@@ -49,8 +97,16 @@ export class LocalInferenceSidecar {
       return;
     }
 
+    const runtimeUrl = new URL(this.config.baseUrl);
+    const port = runtimeUrl.port || (runtimeUrl.protocol === 'https:' ? '443' : '80');
+
     this.child = spawn(this.config.executablePath, this.config.args, {
       stdio: 'pipe',
+      env: {
+        ...process.env,
+        HOST: runtimeUrl.hostname,
+        PORT: port,
+      },
     });
 
     this.child.stdout.on('data', (chunk) => {
