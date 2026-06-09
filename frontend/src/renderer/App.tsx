@@ -908,7 +908,7 @@ function App() {
 
   return (
     <div
-      className={`flex h-screen bg-lexai-bg ${isDragActive ? 'ring-4 ring-sky-400/40 ring-inset' : ''}`}
+      className={`flex h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_28%),linear-gradient(180deg,#0f172a_0%,#111827_100%)] ${isDragActive ? 'ring-4 ring-sky-400/40 ring-inset' : ''}`}
       onDragOver={(event) => {
         event.preventDefault();
         if (runtimeMode === 'local') setIsDragActive(true);
@@ -923,13 +923,13 @@ function App() {
         void importDroppedFiles(event.dataTransfer.files);
       }}
     >
-      <aside className="flex w-72 flex-col border-r border-lexai-border bg-lexai-surface">
-        <div className="p-4">
-          <div className="text-xl font-bold text-lexai-primary">LexAI Desktop</div>
-          <div className="mt-1 text-xs text-lexai-muted">法律 AI 工作台</div>
+      <aside className="flex w-[22rem] flex-col border-r border-white/5 bg-slate-950/55 backdrop-blur">
+        <div className="border-b border-white/5 px-5 py-5">
+          <div className="text-[1.35rem] font-semibold tracking-tight text-lexai-primary">LexAI Desktop</div>
+          <div className="mt-1 text-xs tracking-[0.14em] text-lexai-muted">LEGAL WORKSPACE</div>
         </div>
 
-        <div className="px-4 pb-3">
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {usageSummary && (
             <div className={`mb-3 rounded-2xl border p-3 ${
               usageSummary.usagePercent >= usageSummary.hardLimit
@@ -966,7 +966,7 @@ function App() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
+          <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4 shadow-[0_10px_40px_rgba(15,23,42,0.25)]">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs text-lexai-muted">离线运行</div>
@@ -984,7 +984,7 @@ function App() {
             {localInference.lastError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{localInference.lastError}</p>}
           </div>
 
-          <div className="mt-3 rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
+          <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4 shadow-[0_10px_40px_rgba(15,23,42,0.25)]">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-xs text-lexai-muted">模型管理</div>
@@ -993,7 +993,7 @@ function App() {
               </div>
               <button onClick={() => void loadLocalModelStatus()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
             </div>
-            <div className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-3">
+            <div className="mt-4 rounded-3xl border border-emerald-400/20 bg-emerald-500/5 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-300">当前配置</div>
@@ -1043,7 +1043,7 @@ function App() {
                   ? Math.min((model.downloadedBytes / model.sizeBytes) * 100, 100)
                   : 0;
                 return (
-                  <div key={model.id} className="rounded-2xl border border-lexai-border bg-lexai-surface/40 p-3">
+                  <div key={model.id} className="rounded-3xl border border-white/10 bg-slate-900/40 p-3">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -1117,24 +1117,26 @@ function App() {
           </div>
         </div>
 
-        <div className="px-4 pb-2">
+        <div className="px-4 pb-1">
           <div className="mb-2 text-xs text-lexai-muted">法律体系</div>
-          {(['CN', 'US', 'INT', 'CROSS', 'ALL'] as Jurisdiction[]).map((item) => (
-            <button
-              key={item}
-              onClick={() => setJurisdiction(item)}
-              className={`mb-1 w-full rounded px-3 py-2 text-left text-sm transition-colors ${
-                jurisdiction === item ? 'bg-lexai-primary/20 text-lexai-text' : 'text-lexai-muted hover:bg-lexai-bg'
-              }`}
-            >
-              {jurisdictionLabels[item]}
-            </button>
-          ))}
+          <div className="grid grid-cols-2 gap-2">
+            {(['CN', 'US', 'INT', 'CROSS', 'ALL'] as Jurisdiction[]).map((item) => (
+              <button
+                key={item}
+                onClick={() => setJurisdiction(item)}
+                className={`rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
+                  jurisdiction === item ? 'bg-lexai-primary/20 text-lexai-text' : 'bg-slate-900/40 text-lexai-muted hover:bg-lexai-bg'
+                } ${item === 'ALL' ? 'col-span-2' : ''}`}
+              >
+                {jurisdictionLabels[item]}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div className="px-4 pb-4">
           {runtimeMode === 'cloud' && (
-            <div className="mb-4 rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
+            <div className="mb-4 rounded-3xl border border-white/10 bg-slate-900/55 p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs text-lexai-muted">案件</div>
@@ -1206,7 +1208,7 @@ function App() {
           )}
 
           <div className="mb-2 mt-2 text-xs text-lexai-muted">任务模式</div>
-          <div className="rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
+          <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4">
             <button
               onClick={() => activateTaskMode(null)}
               className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
@@ -1255,7 +1257,7 @@ function App() {
                   <div className="text-[11px] leading-5 text-lexai-muted">登录后可启用自动任务，并随时手动触发执行。</div>
                 ) : (
                   managedAgents.map((agent) => (
-                    <div key={agent.id} className="rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
+                    <div key={agent.id} className="rounded-2xl border border-white/10 bg-slate-900/40 p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="truncate text-xs font-medium text-lexai-text">{agent.name}</div>
@@ -1291,7 +1293,7 @@ function App() {
               <div className="text-[11px] leading-5 text-lexai-muted">本地模式下的聊天记录会保存在桌面端，并在这里显示。</div>
             ) : (
               localConversations.map((storedConversation) => (
-                <div key={storedConversation.id} className={`rounded-xl border p-3 ${activeLocalConversationId === storedConversation.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-lexai-border bg-lexai-bg/70'}`}>
+                <div key={storedConversation.id} className={`rounded-2xl border p-3 ${activeLocalConversationId === storedConversation.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-white/10 bg-slate-900/40'}`}>
                     <button onClick={() => void openLocalConversation(storedConversation.id)} className="w-full text-left">
                       <div className="truncate text-xs font-medium text-lexai-text">{storedConversation.title}</div>
                       <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(storedConversation.updatedAt)} · {storedConversation.messageCount} 条消息 · {storedConversation.attachmentCount} 个附件</div>
@@ -1309,7 +1311,7 @@ function App() {
         <div className="border-t border-lexai-border px-4 py-3">
           <div className="mb-2 text-xs text-lexai-muted">本地工作偏好</div>
           {selectedSkill ? (
-            <div className="rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
+            <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3">
               <div className="text-xs text-lexai-muted">{selectedTaskMode?.label || '当前分析模式'} · {selectedSkill.plugin}</div>
               <textarea
                 value={practiceProfileDraft}
@@ -1336,13 +1338,15 @@ function App() {
           )}
         </div>
 
-        <div className="border-t border-lexai-border p-4 text-xs text-lexai-muted">
-          v0.1.0 · {skills.length} 分析能力 · {agents.length} 个自动任务
+        <div className="border-t border-white/5 px-4 py-4 text-[11px] text-lexai-muted">
+          <div className="rounded-2xl bg-slate-900/35 px-3 py-2 text-center">
+            v0.1.0 · {skills.length} 分析能力 · {agents.length} 个自动任务
+          </div>
         </div>
       </aside>
 
       <main className="flex flex-1 flex-col">
-        <header className="flex min-h-12 items-center justify-between gap-4 border-b border-lexai-border bg-lexai-surface px-4 py-3">
+        <header className="flex min-h-14 items-center justify-between gap-4 border-b border-white/5 bg-slate-950/35 px-5 py-3 backdrop-blur">
           <div className="flex items-center gap-4">
             <span className="text-lexai-text">新对话</span>
             {runtimeMode === 'local' && activeLocalConversationId && <span className="text-xs text-lexai-muted">已载入本地会话</span>}
@@ -1375,7 +1379,7 @@ function App() {
         <div className="flex-1 overflow-y-auto p-6">
           {runtimeMode === 'cloud' && selectedCaseDetail && (
             <div className="mx-auto mb-4 grid w-full max-w-5xl gap-4 lg:grid-cols-[1.1fr,0.9fr]">
-              <div className="rounded-3xl border border-lexai-border bg-lexai-surface p-4">
+              <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-xs text-lexai-muted">当前案件</div>
@@ -1413,7 +1417,7 @@ function App() {
                   )}
                 </div>
               </div>
-              <div className="rounded-3xl border border-lexai-border bg-lexai-surface p-4">
+              <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
                 <div className="text-xs text-lexai-muted">会话历史搜索</div>
                 <div className="mt-3 grid gap-2">
                   <input value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value)} placeholder="关键词" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none" />
@@ -1442,7 +1446,7 @@ function App() {
           )}
 
           {runtimeMode === 'cloud' && (
-            <div className="mx-auto mb-4 w-full max-w-5xl rounded-3xl border border-lexai-border bg-lexai-surface p-4">
+            <div className="mx-auto mb-4 w-full max-w-5xl rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-xs text-lexai-muted">消息提醒</div>
@@ -1536,7 +1540,7 @@ function App() {
 
         <div className="border-t border-lexai-border bg-lexai-surface p-4">
             <div className="mx-auto max-w-5xl">
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div className="mb-4 flex flex-wrap gap-2">
               <button
                 onClick={() => activateTaskMode(null)}
                 className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
@@ -1572,7 +1576,7 @@ function App() {
                   : '本月用量已超过 80%，建议留意剩余额度。'}
               </div>
             )}
-            <div className={`rounded-3xl border px-4 py-4 ${isDragActive ? 'border-sky-400 bg-sky-400/10' : 'border-lexai-border bg-lexai-bg/50'}`}>
+            <div className={`rounded-[1.9rem] border px-5 py-5 shadow-[0_18px_60px_rgba(15,23,42,0.18)] ${isDragActive ? 'border-sky-400 bg-sky-400/10' : 'border-white/10 bg-slate-900/55'}`}>
               <div className="flex items-end gap-3">
                 <button
                   onClick={() => void handleAttachDocuments()}
