@@ -16,6 +16,7 @@
 - 导入三个参考仓库（`claude-for-legal`、`claude-for-legal-ZH`、`claw-code`）
 
 ### Changed
+- 新增 [本地模式手测记录（2026-06-09）](/Users/wanghan/code/lexai-desktop/docs/tasks/local-mode-smoke-test-2026-06-09.md)，记录桌面端本地模式切换、附件入口验证，以及本地附件上下文参与模型生成的冒烟测试结果
 - 本地 embedded runtime 现在支持带引号和空格路径的 `LOCAL_LLM_ARGS`，并完成基于 ModelScope + `llama-cpp-python` 的本地 Qwen2.5-7B 模型下载与测试接线
 - Electron Main 在桌面端开发模式下会主动读取项目根目录 `.env`，避免本地推理 sidecar 配置已填写却未生效
 - 本地推理 sidecar 启动时会隔离并覆盖子进程的 `HOST/PORT`，避免被项目根 `.env` 中的后端端口配置误导到 `3001`
