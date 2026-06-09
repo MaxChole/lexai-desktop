@@ -501,7 +501,7 @@ function App() {
     ALL: '全部',
   };
 
-  const providerLabel = localInference.provider === 'ollama' ? 'Ollama 兼容' : 'Embedded';
+  const providerLabel = localInference.provider === 'ollama' ? 'Ollama 兼容' : '内置引擎';
   const localReady = localInference.enabled && (localInference.healthy || localInference.running);
   const localHealthLabel = localInference.healthy
     ? '已就绪'
@@ -877,8 +877,8 @@ function App() {
     try {
       const result = await window.lexai.agents.run(agentId);
       setAgentMessage(result.run.status === 'success'
-        ? 'Agent 已执行完成，结果已写入通知中心'
-        : `Agent 执行失败：${result.run.error || 'unknown error'}`);
+        ? '自动任务已执行完成，结果已写入消息提醒'
+        : `自动任务执行失败：${result.run.error || 'unknown error'}`);
       await Promise.all([loadManagedAgents(), loadNotifications()]);
     } catch (error) {
       setAgentMessage(error instanceof Error ? error.message : String(error));
@@ -969,7 +969,7 @@ function App() {
           <div className="rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs text-lexai-muted">本地推理</div>
+                <div className="text-xs text-lexai-muted">离线运行</div>
                 <div className="mt-1 text-sm font-medium text-lexai-text">{providerLabel} · {localInference.model}</div>
               </div>
               <button onClick={() => void loadLocalInferenceStatus()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
@@ -979,7 +979,7 @@ function App() {
               {localStatusLoading && <span className="text-[11px] text-lexai-muted">检测中...</span>}
             </div>
             <p className="mt-2 text-[11px] leading-5 text-lexai-muted">
-              {localInference.enabled ? `接口 ${localInference.baseUrl}${localInference.pid ? ` · PID ${localInference.pid}` : ''}` : '尚未配置本地 runtime，可继续使用云端模式。'}
+              {localInference.enabled ? `服务 ${localInference.baseUrl}${localInference.pid ? ` · 进程 ${localInference.pid}` : ''}` : '尚未配置离线引擎，可继续使用云端模式。'}
             </p>
             {localInference.lastError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{localInference.lastError}</p>}
           </div>
@@ -987,16 +987,16 @@ function App() {
           <div className="mt-3 rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-xs text-lexai-muted">模型中心</div>
+                <div className="text-xs text-lexai-muted">模型管理</div>
                 <div className="mt-1 text-sm font-medium text-lexai-text">离线模型</div>
-                <p className="mt-1 text-[11px] leading-5 text-lexai-muted">推荐模型支持应用内下载；实验模型仅提供来源信息。</p>
+                <p className="mt-1 text-[11px] leading-5 text-lexai-muted">推荐模型支持应用内下载；高级模型仅展示来源信息。</p>
               </div>
               <button onClick={() => void loadLocalModelStatus()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
             </div>
             <div className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-300">当前使用</div>
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-300">当前配置</div>
                   <div className="mt-1 text-sm font-medium text-lexai-text">{localModel.name}</div>
                 </div>
                 <span className={`rounded-full px-2 py-1 text-[11px] ${getLocalModelTone(localModel)}`}>{formatLocalModelState(localModel)}</span>
@@ -1012,7 +1012,7 @@ function App() {
                 <div className="text-[11px] text-lexai-muted">
                   {localModel.state === 'downloading' && localModel.speedBytesPerSecond
                     ? `${formatFileSize(localModel.speedBytesPerSecond)}/s${formatEta(localModel.etaSeconds) ? ` · 剩余 ${formatEta(localModel.etaSeconds)}` : ''}`
-                    : '默认本地模型'}
+                    : '默认离线模型'}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -1048,8 +1048,8 @@ function App() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-sm font-medium text-lexai-text">{model.name}</div>
-                          {model.recommended && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">Recommended</span>}
-                          {model.experimental && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">Experimental</span>}
+                          {model.recommended && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">推荐</span>}
+                          {model.experimental && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">高级</span>}
                         </div>
                         <p className="mt-1 text-[11px] leading-5 text-lexai-muted">{model.summary}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-lexai-muted">
@@ -1057,7 +1057,7 @@ function App() {
                           <span>推荐内存 {model.recommendedRamGb} GB</span>
                           {model.supportsEmbeddedRuntime
                             ? <span>支持应用内下载</span>
-                            : <span>需手动部署专用运行时</span>}
+                            : <span>需手动准备专用环境</span>}
                         </div>
                       </div>
                       <span className={`rounded-full px-2 py-1 text-[11px] ${getLocalModelTone(model)}`}>
@@ -1137,7 +1137,7 @@ function App() {
             <div className="mb-4 rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-lexai-muted">案件库</div>
+                  <div className="text-xs text-lexai-muted">案件</div>
                   <div className="mt-1 text-sm font-medium text-lexai-text">
                     {currentUser ? currentUser.email : '未登录'}
                   </div>
@@ -1245,14 +1245,14 @@ function App() {
           {runtimeMode === 'cloud' && (
             <>
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-xs text-lexai-muted">Agent 面板</div>
+                <div className="text-xs text-lexai-muted">自动任务</div>
                 <button onClick={() => void loadManagedAgents()} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">刷新</button>
               </div>
               <div className="mb-4 max-h-56 space-y-2 overflow-y-auto">
                 {agentLoading ? (
-                  <div className="text-[11px] text-lexai-muted">加载 Agent 中...</div>
+                  <div className="text-[11px] text-lexai-muted">加载自动任务中...</div>
                 ) : managedAgents.length === 0 ? (
-                  <div className="text-[11px] leading-5 text-lexai-muted">已登录后可启用定时 Agent，并手动触发执行。</div>
+                  <div className="text-[11px] leading-5 text-lexai-muted">登录后可启用自动任务，并随时手动触发执行。</div>
                 ) : (
                   managedAgents.map((agent) => (
                     <div key={agent.id} className="rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
@@ -1283,7 +1283,7 @@ function App() {
           )}
 
           <div className="mb-3 flex items-center justify-between">
-            <div className="text-xs text-lexai-muted">本地会话</div>
+            <div className="text-xs text-lexai-muted">离线记录</div>
             <button onClick={handleNewConversation} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">新建</button>
           </div>
           <div className="max-h-48 space-y-2 overflow-y-auto">
@@ -1314,11 +1314,11 @@ function App() {
               <textarea
                 value={practiceProfileDraft}
                 onChange={(event) => setPracticeProfileDraft(event.target.value)}
-                placeholder="为当前插件保存本地 practice profile。为空时将回退到 references 中的 CLAUDE.md 模板。"
+                placeholder="为当前任务保存本地工作偏好。留空时将使用内置模板。"
                 className="mt-2 h-32 w-full resize-none rounded-lg border border-lexai-border bg-lexai-surface px-3 py-2 text-xs leading-5 text-lexai-text placeholder-lexai-muted focus:border-lexai-primary focus:outline-none"
               />
               <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="text-[11px] text-lexai-muted">{practiceProfileLoading ? '加载中...' : '本地模式优先使用这里的内容'}</div>
+                <div className="text-[11px] text-lexai-muted">{practiceProfileLoading ? '加载中...' : '离线模式会优先使用这里的内容'}</div>
                 <button
                   onClick={() => void handleSavePracticeProfile()}
                   disabled={practiceProfileSaving || practiceProfileLoading}
@@ -1337,7 +1337,7 @@ function App() {
         </div>
 
         <div className="border-t border-lexai-border p-4 text-xs text-lexai-muted">
-          v0.1.0 · {skills.length} 分析能力 · {agents.length} Agents
+          v0.1.0 · {skills.length} 分析能力 · {agents.length} 个自动任务
         </div>
       </aside>
 
@@ -1445,8 +1445,8 @@ function App() {
             <div className="mx-auto mb-4 w-full max-w-5xl rounded-3xl border border-lexai-border bg-lexai-surface p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-xs text-lexai-muted">消息中心</div>
-                  <div className="mt-1 text-sm font-medium text-lexai-text">Agent 执行结果与桌面通知</div>
+                  <div className="text-xs text-lexai-muted">消息提醒</div>
+                  <div className="mt-1 text-sm font-medium text-lexai-text">自动任务结果与桌面通知</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => void loadNotifications()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
@@ -1457,7 +1457,7 @@ function App() {
                 {notificationLoading ? (
                   <div className="text-sm text-lexai-muted">加载通知中...</div>
                 ) : notifications.length === 0 ? (
-                  <div className="text-sm text-lexai-muted">暂无通知。手动运行或等待定时 Agent 执行后，这里会出现结果摘要。</div>
+                  <div className="text-sm text-lexai-muted">暂无通知。手动运行或等待自动任务执行后，这里会出现结果摘要。</div>
                 ) : (
                   notifications.map((item) => (
                     <div key={item.id} className={`rounded-2xl border px-3 py-3 ${item.read ? 'border-lexai-border bg-lexai-bg/50' : 'border-amber-400/30 bg-amber-400/10'}`}>
