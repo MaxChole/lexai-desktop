@@ -47,6 +47,7 @@ interface AgentItem {
 
 type Jurisdiction = 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL';
 type RuntimeMode = 'cloud' | 'local';
+type AppView = 'workspace' | 'settings';
 
 interface ConversationMessage {
   role: 'user' | 'assistant' | 'system';
@@ -262,6 +263,7 @@ function App() {
   const [notifications, setNotifications] = useState<NotificationState[]>([]);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [selectedTaskModeId, setSelectedTaskModeId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<AppView>('workspace');
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -520,6 +522,7 @@ function App() {
   const selectedTaskMode = visibleTaskModes.find((item) => item.id === selectedTaskModeId)
     ?? TASK_MODES.find((item) => item.id === selectedTaskModeId)
     ?? null;
+  const headerTitle = activeView === 'settings' ? '设置' : '新对话';
 
   function resolveSkillForTask(taskModeId: string | null): SkillItem | null {
     if (!taskModeId) return null;
@@ -929,6 +932,31 @@ function App() {
           <div className="mt-1 text-xs tracking-[0.14em] text-lexai-muted">LEGAL WORKSPACE</div>
         </div>
 
+        <div className="border-b border-white/5 px-4 py-4">
+          <div className="grid grid-cols-2 gap-2 rounded-3xl border border-white/10 bg-slate-900/45 p-2">
+            <button
+              onClick={() => setActiveView('workspace')}
+              className={`rounded-2xl px-3 py-2 text-sm transition-colors ${
+                activeView === 'workspace'
+                  ? 'bg-lexai-primary/20 text-lexai-text'
+                  : 'text-lexai-muted hover:bg-slate-900/60 hover:text-lexai-text'
+              }`}
+            >
+              工作台
+            </button>
+            <button
+              onClick={() => setActiveView('settings')}
+              className={`rounded-2xl px-3 py-2 text-sm transition-colors ${
+                activeView === 'settings'
+                  ? 'bg-lexai-primary/20 text-lexai-text'
+                  : 'text-lexai-muted hover:bg-slate-900/60 hover:text-lexai-text'
+              }`}
+            >
+              设置
+            </button>
+          </div>
+        </div>
+
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {usageSummary && (
             <div className={`mb-3 rounded-2xl border p-3 ${
@@ -965,378 +993,234 @@ function App() {
               </div>
             </div>
           )}
+        </div>
 
-          <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4 shadow-[0_10px_40px_rgba(15,23,42,0.25)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs text-lexai-muted">离线运行</div>
-                <div className="mt-1 text-sm font-medium text-lexai-text">{providerLabel} · {localInference.model}</div>
-              </div>
-              <button onClick={() => void loadLocalInferenceStatus()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <span className={`rounded-full px-2 py-1 text-[11px] ${localInference.healthy ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{localHealthLabel}</span>
-              {localStatusLoading && <span className="text-[11px] text-lexai-muted">检测中...</span>}
-            </div>
-            <p className="mt-2 text-[11px] leading-5 text-lexai-muted">
-              {localInference.enabled ? `服务 ${localInference.baseUrl}${localInference.pid ? ` · 进程 ${localInference.pid}` : ''}` : '尚未配置离线引擎，可继续使用云端模式。'}
-            </p>
-            {localInference.lastError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{localInference.lastError}</p>}
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4 shadow-[0_10px_40px_rgba(15,23,42,0.25)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs text-lexai-muted">模型管理</div>
-                <div className="mt-1 text-sm font-medium text-lexai-text">离线模型</div>
-                <p className="mt-1 text-[11px] leading-5 text-lexai-muted">推荐模型支持应用内下载；高级模型仅展示来源信息。</p>
-              </div>
-              <button onClick={() => void loadLocalModelStatus()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
-            </div>
-            <div className="mt-4 rounded-3xl border border-emerald-400/20 bg-emerald-500/5 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-300">当前配置</div>
-                  <div className="mt-1 text-sm font-medium text-lexai-text">{localModel.name}</div>
-                </div>
-                <span className={`rounded-full px-2 py-1 text-[11px] ${getLocalModelTone(localModel)}`}>{formatLocalModelState(localModel)}</span>
-              </div>
-              <div className="mt-3 flex items-center justify-between text-[11px] text-lexai-muted">
-                <span>{formatFileSize(localModel.sizeBytes)} · 推荐内存 {localModel.recommendedRamGb} GB</span>
-                <span>{formatFileSize(localModel.downloadedBytes)} / {formatFileSize(localModel.sizeBytes)}</span>
-              </div>
-              <div className="mt-2 h-2 rounded-full bg-lexai-surface">
-                <div className="h-2 rounded-full bg-emerald-400 transition-all" style={{ width: `${localModelProgress}%` }} />
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="text-[11px] text-lexai-muted">
-                  {localModel.state === 'downloading' && localModel.speedBytesPerSecond
-                    ? `${formatFileSize(localModel.speedBytesPerSecond)}/s${formatEta(localModel.etaSeconds) ? ` · 剩余 ${formatEta(localModel.etaSeconds)}` : ''}`
-                    : '默认离线模型'}
-                </div>
-                <div className="flex items-center gap-2">
+        {activeView === 'workspace' ? (
+          <>
+            <div className="px-4 pb-1">
+              <div className="mb-2 text-xs text-lexai-muted">法律体系</div>
+              <div className="grid grid-cols-2 gap-2">
+                {(['CN', 'US', 'INT', 'CROSS', 'ALL'] as Jurisdiction[]).map((item) => (
                   <button
-                    onClick={() => void handleLocalModelDownload()}
-                    disabled={localModelLoading || (!localModel.sourceUrl && localModel.state === 'not_installed')}
-                    className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
-                      localModelLoading || (!localModel.sourceUrl && localModel.state === 'not_installed')
-                        ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70'
-                        : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
-                    }`}
+                    key={item}
+                    onClick={() => setJurisdiction(item)}
+                    className={`rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
+                      jurisdiction === item ? 'bg-lexai-primary/20 text-lexai-text' : 'bg-slate-900/40 text-lexai-muted hover:bg-lexai-bg'
+                    } ${item === 'ALL' ? 'col-span-2' : ''}`}
                   >
-                    {localModel.state === 'downloading' ? '暂停下载' : localModel.state === 'paused' ? '继续下载' : localModel.state === 'installed' ? '已安装' : '下载模型'}
+                    {jurisdictionLabels[item]}
                   </button>
-                  {localModel.state !== 'not_installed' && (
-                    <button onClick={() => void handleDeleteLocalModel()} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200">
-                      删除
+                ))}
+              </div>
+            </div>
+
+            <div className="px-4 pb-4">
+              {runtimeMode === 'cloud' && (
+                <div className="mb-4 rounded-3xl border border-white/10 bg-slate-900/55 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-lexai-muted">案件</div>
+                      <div className="mt-1 text-sm font-medium text-lexai-text">
+                        {currentUser ? currentUser.email : '未登录'}
+                      </div>
+                    </div>
+                    <button onClick={() => void loadCloudCases()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
+                  </div>
+                  <input
+                    value={caseSearch}
+                    onChange={(event) => setCaseSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void loadCloudCases(event.currentTarget.value);
+                    }}
+                    placeholder="搜索案件标题 / 标签"
+                    className="mt-3 w-full rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+                  />
+                  <div className="mt-3 grid gap-2">
+                    <input
+                      value={caseForm.title}
+                      onChange={(event) => setCaseForm((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="新建案件标题"
+                      className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+                    />
+                    <textarea
+                      value={caseForm.description}
+                      onChange={(event) => setCaseForm((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="案件描述"
+                      className="h-20 resize-none rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+                    />
+                    <input
+                      value={caseForm.tags}
+                      onChange={(event) => setCaseForm((current) => ({ ...current, tags: event.target.value }))}
+                      placeholder="标签，逗号分隔"
+                      className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
+                    />
+                    <button
+                      onClick={() => void handleCreateCase()}
+                      disabled={caseSaving || !caseForm.title.trim()}
+                      className={`rounded-xl px-3 py-2 text-sm ${caseSaving || !caseForm.title.trim() ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70' : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'}`}
+                    >
+                      {caseSaving ? '创建中...' : '新建案件'}
                     </button>
+                  </div>
+                  {caseMessage && <div className="mt-2 text-[11px] text-lexai-muted">{caseMessage}</div>}
+                  {agentMessage && <div className="mt-2 text-[11px] text-lexai-muted">{agentMessage}</div>}
+                  <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
+                    {caseLoading ? (
+                      <div className="text-[11px] text-lexai-muted">加载案件中...</div>
+                    ) : cloudCases.length === 0 ? (
+                      <div className="text-[11px] text-lexai-muted">登录后可创建案件，并将云端会话与文档绑定到案件。</div>
+                    ) : (
+                      cloudCases.map((item) => (
+                        <div key={item.id} className={`rounded-xl border p-3 ${selectedCaseId === item.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-lexai-border bg-lexai-surface/60'}`}>
+                          <button onClick={() => setSelectedCaseId(item.id)} className="w-full text-left">
+                            <div className="truncate text-sm font-medium text-lexai-text">{item.title}</div>
+                            <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(item.updatedAt)} · {item.documentCount ?? 0} 文档 · {item.sessionCount ?? 0} 会话</div>
+                          </button>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <div className="truncate text-[11px] text-lexai-muted">{item.tags.join(' · ') || '无标签'}</div>
+                            <button onClick={() => void handleDeleteCase(item.id)} className="text-[11px] text-rose-300 hover:text-rose-200">删除</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-2 mt-2 text-xs text-lexai-muted">任务模式</div>
+              <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4">
+                <button
+                  onClick={() => activateTaskMode(null)}
+                  className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                    selectedTaskModeId === null
+                      ? 'border-lexai-primary bg-lexai-primary/10'
+                      : 'border-lexai-border bg-lexai-surface/40 hover:border-lexai-primary/40'
+                  }`}
+                >
+                  <div className="text-sm font-medium text-lexai-text">自动分析</div>
+                  <p className="mt-1 text-[11px] leading-5 text-lexai-muted">根据问题内容、附件和当前法域自动挑选合适的分析工作流。</p>
+                </button>
+                <div className="mt-3 space-y-2">
+                  {loading ? (
+                    <div className="text-[11px] text-lexai-muted animate-pulse">加载任务模式中...</div>
+                  ) : (
+                    visibleTaskModes.map((task) => (
+                      <button
+                        key={task.id}
+                        onClick={() => activateTaskMode(task.id)}
+                        className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                          selectedTaskModeId === task.id
+                            ? 'border-lexai-primary bg-lexai-primary/10'
+                            : 'border-lexai-border bg-lexai-surface/40 hover:border-lexai-primary/40'
+                        }`}
+                      >
+                        <div className="text-sm font-medium text-lexai-text">{task.label}</div>
+                        <p className="mt-1 text-[11px] leading-5 text-lexai-muted">{task.description}</p>
+                      </button>
+                    ))
                   )}
                 </div>
               </div>
-              {localModel.warning && <p className="mt-2 text-[11px] leading-5 text-amber-300">{localModel.warning}</p>}
-              {localModel.lastError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{localModel.lastError}</p>}
             </div>
-            <div className="mt-3 space-y-3">
-              {localModelCatalog.map((model) => {
-                const isPrimaryModel = model.id === localModel.id;
-                const progress = model.sizeBytes > 0
-                  ? Math.min((model.downloadedBytes / model.sizeBytes) * 100, 100)
-                  : 0;
-                return (
-                  <div key={model.id} className="rounded-3xl border border-white/10 bg-slate-900/40 p-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="text-sm font-medium text-lexai-text">{model.name}</div>
-                          {model.recommended && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">推荐</span>}
-                          {model.experimental && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">高级</span>}
-                        </div>
-                        <p className="mt-1 text-[11px] leading-5 text-lexai-muted">{model.summary}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-lexai-muted">
-                          <span>{formatFileSize(model.sizeBytes)}</span>
-                          <span>推荐内存 {model.recommendedRamGb} GB</span>
-                          {model.supportsEmbeddedRuntime
-                            ? <span>支持应用内下载</span>
-                            : <span>需手动准备专用环境</span>}
-                        </div>
-                      </div>
-                      <span className={`rounded-full px-2 py-1 text-[11px] ${getLocalModelTone(model)}`}>
-                        {formatLocalModelState(model)}
-                      </span>
-                    </div>
-                    {model.supportsEmbeddedRuntime && (
-                      <>
-                        <div className="mt-3 flex items-center justify-between text-[11px] text-lexai-muted">
-                          <span>{formatFileSize(model.downloadedBytes)} / {formatFileSize(model.sizeBytes)}</span>
-                          {model.state === 'downloading' && model.speedBytesPerSecond
-                            ? <span>{formatFileSize(model.speedBytesPerSecond)}/s{formatEta(model.etaSeconds) ? ` · 剩余 ${formatEta(model.etaSeconds)}` : ''}</span>
-                            : <span>{isPrimaryModel ? '当前默认模型' : '可下载'}</span>}
-                        </div>
-                        <div className="mt-2 h-2 rounded-full bg-lexai-bg">
-                          <div className="h-2 rounded-full bg-sky-400 transition-all" style={{ width: `${progress}%` }} />
-                        </div>
-                      </>
-                    )}
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {isPrimaryModel && (
-                        <>
-                          <button
-                            onClick={() => void handleLocalModelDownload()}
-                            disabled={localModelLoading || (!model.sourceUrl && model.state === 'not_installed')}
-                            className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
-                              localModelLoading || (!model.sourceUrl && model.state === 'not_installed')
-                                ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70'
-                                : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
-                            }`}
-                          >
-                            {model.state === 'downloading' ? '暂停下载' : model.state === 'paused' ? '继续下载' : model.state === 'installed' ? '已安装' : '下载模型'}
-                          </button>
-                          {model.state !== 'not_installed' && model.state !== 'unsupported' && (
-                            <button onClick={() => void handleDeleteLocalModel()} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200">
-                              删除
+
+            <div className="border-t border-lexai-border px-4 py-3">
+              {runtimeMode === 'cloud' && (
+                <>
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-xs text-lexai-muted">自动任务</div>
+                    <button onClick={() => void loadManagedAgents()} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">刷新</button>
+                  </div>
+                  <div className="mb-4 max-h-56 space-y-2 overflow-y-auto">
+                    {agentLoading ? (
+                      <div className="text-[11px] text-lexai-muted">加载自动任务中...</div>
+                    ) : managedAgents.length === 0 ? (
+                      <div className="text-[11px] leading-5 text-lexai-muted">登录后可启用自动任务，并随时手动触发执行。</div>
+                    ) : (
+                      managedAgents.map((agent) => (
+                        <div key={agent.id} className="rounded-2xl border border-white/10 bg-slate-900/40 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-medium text-lexai-text">{agent.name}</div>
+                              <div className="mt-1 text-[11px] text-lexai-muted">
+                                {agent.userConfig.cronExpr || agent.defaultCron} · {agent.userConfig.lastStatus || 'idle'}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => void handleToggleAgent(agent)}
+                              className={`rounded-full px-2 py-1 text-[11px] ${agent.userConfig.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}
+                            >
+                              {agent.userConfig.enabled ? '已启用' : '已暂停'}
                             </button>
-                          )}
-                        </>
-                      )}
-                      {model.sourcePageUrl && (
-                        <button onClick={() => void window.lexai.localModel.openLink(model.sourcePageUrl as string)} className="rounded-lg border border-lexai-border px-3 py-1.5 text-xs text-lexai-muted hover:text-lexai-text">
-                          官方页面
-                        </button>
-                      )}
-                      {model.sourceUrl && model.sourceUrl !== model.sourcePageUrl && (
-                        <button onClick={() => void window.lexai.localModel.openLink(model.sourceUrl as string)} className="rounded-lg border border-lexai-border px-3 py-1.5 text-xs text-lexai-muted hover:text-lexai-text">
-                          下载地址
-                        </button>
-                      )}
-                    </div>
-                    {model.lastError && !isPrimaryModel && <p className="mt-2 text-[11px] leading-5 text-amber-300">{model.lastError}</p>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-4 pb-1">
-          <div className="mb-2 text-xs text-lexai-muted">法律体系</div>
-          <div className="grid grid-cols-2 gap-2">
-            {(['CN', 'US', 'INT', 'CROSS', 'ALL'] as Jurisdiction[]).map((item) => (
-              <button
-                key={item}
-                onClick={() => setJurisdiction(item)}
-                className={`rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
-                  jurisdiction === item ? 'bg-lexai-primary/20 text-lexai-text' : 'bg-slate-900/40 text-lexai-muted hover:bg-lexai-bg'
-                } ${item === 'ALL' ? 'col-span-2' : ''}`}
-              >
-                {jurisdictionLabels[item]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="px-4 pb-4">
-          {runtimeMode === 'cloud' && (
-            <div className="mb-4 rounded-3xl border border-white/10 bg-slate-900/55 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs text-lexai-muted">案件</div>
-                  <div className="mt-1 text-sm font-medium text-lexai-text">
-                    {currentUser ? currentUser.email : '未登录'}
-                  </div>
-                </div>
-                <button onClick={() => void loadCloudCases()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
-              </div>
-              <input
-                value={caseSearch}
-                onChange={(event) => setCaseSearch(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void loadCloudCases(event.currentTarget.value);
-                }}
-                placeholder="搜索案件标题 / 标签"
-                className="mt-3 w-full rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
-              />
-              <div className="mt-3 grid gap-2">
-                <input
-                  value={caseForm.title}
-                  onChange={(event) => setCaseForm((current) => ({ ...current, title: event.target.value }))}
-                  placeholder="新建案件标题"
-                  className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
-                />
-                <textarea
-                  value={caseForm.description}
-                  onChange={(event) => setCaseForm((current) => ({ ...current, description: event.target.value }))}
-                  placeholder="案件描述"
-                  className="h-20 resize-none rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
-                />
-                <input
-                  value={caseForm.tags}
-                  onChange={(event) => setCaseForm((current) => ({ ...current, tags: event.target.value }))}
-                  placeholder="标签，逗号分隔"
-                  className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
-                />
-                <button
-                  onClick={() => void handleCreateCase()}
-                  disabled={caseSaving || !caseForm.title.trim()}
-                  className={`rounded-xl px-3 py-2 text-sm ${caseSaving || !caseForm.title.trim() ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70' : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'}`}
-                >
-                  {caseSaving ? '创建中...' : '新建案件'}
-                </button>
-              </div>
-              {caseMessage && <div className="mt-2 text-[11px] text-lexai-muted">{caseMessage}</div>}
-              {agentMessage && <div className="mt-2 text-[11px] text-lexai-muted">{agentMessage}</div>}
-              <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
-                {caseLoading ? (
-                  <div className="text-[11px] text-lexai-muted">加载案件中...</div>
-                ) : cloudCases.length === 0 ? (
-                  <div className="text-[11px] text-lexai-muted">登录后可创建案件，并将云端会话与文档绑定到案件。</div>
-                ) : (
-                  cloudCases.map((item) => (
-                    <div key={item.id} className={`rounded-xl border p-3 ${selectedCaseId === item.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-lexai-border bg-lexai-surface/60'}`}>
-                      <button onClick={() => setSelectedCaseId(item.id)} className="w-full text-left">
-                        <div className="truncate text-sm font-medium text-lexai-text">{item.title}</div>
-                        <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(item.updatedAt)} · {item.documentCount ?? 0} 文档 · {item.sessionCount ?? 0} 会话</div>
-                      </button>
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="truncate text-[11px] text-lexai-muted">{item.tags.join(' · ') || '无标签'}</div>
-                        <button onClick={() => void handleDeleteCase(item.id)} className="text-[11px] text-rose-300 hover:text-rose-200">删除</button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="mb-2 mt-2 text-xs text-lexai-muted">任务模式</div>
-          <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4">
-            <button
-              onClick={() => activateTaskMode(null)}
-              className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
-                selectedTaskModeId === null
-                  ? 'border-lexai-primary bg-lexai-primary/10'
-                  : 'border-lexai-border bg-lexai-surface/40 hover:border-lexai-primary/40'
-              }`}
-            >
-              <div className="text-sm font-medium text-lexai-text">自动分析</div>
-              <p className="mt-1 text-[11px] leading-5 text-lexai-muted">根据问题内容、附件和当前法域自动挑选合适的分析工作流。</p>
-            </button>
-            <div className="mt-3 space-y-2">
-              {loading ? (
-                <div className="text-[11px] text-lexai-muted animate-pulse">加载任务模式中...</div>
-              ) : (
-                visibleTaskModes.map((task) => (
-                  <button
-                    key={task.id}
-                    onClick={() => activateTaskMode(task.id)}
-                    className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
-                      selectedTaskModeId === task.id
-                        ? 'border-lexai-primary bg-lexai-primary/10'
-                        : 'border-lexai-border bg-lexai-surface/40 hover:border-lexai-primary/40'
-                    }`}
-                  >
-                    <div className="text-sm font-medium text-lexai-text">{task.label}</div>
-                    <p className="mt-1 text-[11px] leading-5 text-lexai-muted">{task.description}</p>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-lexai-border px-4 py-3">
-          {runtimeMode === 'cloud' && (
-            <>
-              <div className="mb-3 flex items-center justify-between">
-                <div className="text-xs text-lexai-muted">自动任务</div>
-                <button onClick={() => void loadManagedAgents()} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">刷新</button>
-              </div>
-              <div className="mb-4 max-h-56 space-y-2 overflow-y-auto">
-                {agentLoading ? (
-                  <div className="text-[11px] text-lexai-muted">加载自动任务中...</div>
-                ) : managedAgents.length === 0 ? (
-                  <div className="text-[11px] leading-5 text-lexai-muted">登录后可启用自动任务，并随时手动触发执行。</div>
-                ) : (
-                  managedAgents.map((agent) => (
-                    <div key={agent.id} className="rounded-2xl border border-white/10 bg-slate-900/40 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-xs font-medium text-lexai-text">{agent.name}</div>
-                          <div className="mt-1 text-[11px] text-lexai-muted">
-                            {agent.userConfig.cronExpr || agent.defaultCron} · {agent.userConfig.lastStatus || 'idle'}
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-lexai-muted">{agent.description}</p>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <div className="truncate text-[11px] text-lexai-muted">{agent.plugin}</div>
+                            <button onClick={() => void handleRunAgent(agent.id)} className="text-[11px] text-sky-300 hover:text-sky-200">立即执行</button>
                           </div>
                         </div>
-                        <button
-                          onClick={() => void handleToggleAgent(agent)}
-                          className={`rounded-full px-2 py-1 text-[11px] ${agent.userConfig.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}
-                        >
-                          {agent.userConfig.enabled ? '已启用' : '已暂停'}
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs text-lexai-muted">离线记录</div>
+                <button onClick={handleNewConversation} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">新建</button>
+              </div>
+              <div className="max-h-48 space-y-2 overflow-y-auto">
+                {localConversations.length === 0 ? (
+                  <div className="text-[11px] leading-5 text-lexai-muted">本地模式下的聊天记录会保存在桌面端，并在这里显示。</div>
+                ) : (
+                  localConversations.map((storedConversation) => (
+                    <div key={storedConversation.id} className={`rounded-2xl border p-3 ${activeLocalConversationId === storedConversation.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-white/10 bg-slate-900/40'}`}>
+                        <button onClick={() => void openLocalConversation(storedConversation.id)} className="w-full text-left">
+                          <div className="truncate text-xs font-medium text-lexai-text">{storedConversation.title}</div>
+                          <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(storedConversation.updatedAt)} · {storedConversation.messageCount} 条消息 · {storedConversation.attachmentCount} 个附件</div>
                         </button>
-                      </div>
-                      <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-lexai-muted">{agent.description}</p>
                       <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="truncate text-[11px] text-lexai-muted">{agent.plugin}</div>
-                        <button onClick={() => void handleRunAgent(agent.id)} className="text-[11px] text-sky-300 hover:text-sky-200">立即执行</button>
+                        <div className="truncate text-[11px] text-lexai-muted">{getTaskModeLabelFromSkillId(storedConversation.skillId)}</div>
+                        <button onClick={() => void handleDeleteLocalConversation(storedConversation.id)} className="text-[11px] text-rose-300 hover:text-rose-200">删除</button>
                       </div>
                     </div>
                   ))
                 )}
               </div>
-            </>
-          )}
-
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-xs text-lexai-muted">离线记录</div>
-            <button onClick={handleNewConversation} className="rounded-md border border-lexai-border px-2 py-1 text-[11px] text-lexai-muted hover:text-lexai-text">新建</button>
-          </div>
-          <div className="max-h-48 space-y-2 overflow-y-auto">
-            {localConversations.length === 0 ? (
-              <div className="text-[11px] leading-5 text-lexai-muted">本地模式下的聊天记录会保存在桌面端，并在这里显示。</div>
-            ) : (
-              localConversations.map((storedConversation) => (
-                <div key={storedConversation.id} className={`rounded-2xl border p-3 ${activeLocalConversationId === storedConversation.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-white/10 bg-slate-900/40'}`}>
-                    <button onClick={() => void openLocalConversation(storedConversation.id)} className="w-full text-left">
-                      <div className="truncate text-xs font-medium text-lexai-text">{storedConversation.title}</div>
-                      <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(storedConversation.updatedAt)} · {storedConversation.messageCount} 条消息 · {storedConversation.attachmentCount} 个附件</div>
-                    </button>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="truncate text-[11px] text-lexai-muted">{getTaskModeLabelFromSkillId(storedConversation.skillId)}</div>
-                    <button onClick={() => void handleDeleteLocalConversation(storedConversation.id)} className="text-[11px] text-rose-300 hover:text-rose-200">删除</button>
-                  </div>
+            </div>
+          </>
+        ) : (
+          <div className="px-4 pb-4">
+            <div className="rounded-3xl border border-white/10 bg-slate-900/55 p-4 shadow-[0_10px_40px_rgba(15,23,42,0.25)]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-lexai-muted">当前环境</div>
+                  <div className="mt-1 text-sm font-medium text-lexai-text">{runtimeMode === 'local' ? '离线工作流已启用' : '云端工作流已启用'}</div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="border-t border-lexai-border px-4 py-3">
-          <div className="mb-2 text-xs text-lexai-muted">本地工作偏好</div>
-          {selectedSkill ? (
-            <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3">
-              <div className="text-xs text-lexai-muted">{selectedTaskMode?.label || '当前分析模式'} · {selectedSkill.plugin}</div>
-              <textarea
-                value={practiceProfileDraft}
-                onChange={(event) => setPracticeProfileDraft(event.target.value)}
-                placeholder="为当前任务保存本地工作偏好。留空时将使用内置模板。"
-                className="mt-2 h-32 w-full resize-none rounded-lg border border-lexai-border bg-lexai-surface px-3 py-2 text-xs leading-5 text-lexai-text placeholder-lexai-muted focus:border-lexai-primary focus:outline-none"
-              />
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="text-[11px] text-lexai-muted">{practiceProfileLoading ? '加载中...' : '离线模式会优先使用这里的内容'}</div>
+                <span className={`rounded-full px-2 py-1 text-[11px] ${modePillClass}`}>{runtimeMode === 'local' ? '本地模式' : '云端模式'}</span>
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-lexai-muted">
+                模型、离线引擎和本地工作偏好都集中放在这里，不再打断主工作台。
+              </p>
+              <div className="mt-4 space-y-2">
+                <button onClick={() => void loadLocalInferenceStatus()} className="w-full rounded-2xl border border-white/10 bg-slate-900/40 px-3 py-3 text-left text-sm text-lexai-text hover:border-lexai-primary/40">
+                  离线引擎状态 · {localHealthLabel}
+                </button>
+                <button onClick={() => void loadLocalModelStatus()} className="w-full rounded-2xl border border-white/10 bg-slate-900/40 px-3 py-3 text-left text-sm text-lexai-text hover:border-lexai-primary/40">
+                  模型目录 · {localModelCatalog.length} 个条目
+                </button>
                 <button
-                  onClick={() => void handleSavePracticeProfile()}
-                  disabled={practiceProfileSaving || practiceProfileLoading}
-                  className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
-                    practiceProfileSaving || practiceProfileLoading ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70' : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
-                  }`}
+                  onClick={() => {
+                    setActiveView('workspace');
+                    activateTaskMode(selectedTaskModeId);
+                  }}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900/40 px-3 py-3 text-left text-sm text-lexai-text hover:border-lexai-primary/40"
                 >
-                  {practiceProfileSaving ? '保存中...' : '保存'}
+                  返回工作台
                 </button>
               </div>
-              {practiceProfileMessage && <div className="mt-2 text-[11px] text-lexai-muted">{practiceProfileMessage}</div>}
             </div>
-          ) : (
-            <div className="text-[11px] leading-5 text-lexai-muted">选择一个任务模式后，这里可以保存对应插件的本地工作偏好。</div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="border-t border-white/5 px-4 py-4 text-[11px] text-lexai-muted">
           <div className="rounded-2xl bg-slate-900/35 px-3 py-2 text-center">
@@ -1348,7 +1232,7 @@ function App() {
       <main className="flex flex-1 flex-col">
         <header className="flex min-h-14 items-center justify-between gap-4 border-b border-white/5 bg-slate-950/35 px-5 py-3 backdrop-blur">
           <div className="flex items-center gap-4">
-            <span className="text-lexai-text">新对话</span>
+            <span className="text-lexai-text">{headerTitle}</span>
             {runtimeMode === 'local' && activeLocalConversationId && <span className="text-xs text-lexai-muted">已载入本地会话</span>}
             <span className="rounded bg-lexai-primary/20 px-2 py-0.5 text-xs text-lexai-primary">{jurisdictionLabels[jurisdiction]}</span>
             <span className={`rounded px-2 py-0.5 text-xs ${modePillClass}`}>{runtimeMode === 'local' ? '本地模式' : '云端模式'}</span>
@@ -1377,7 +1261,205 @@ function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {runtimeMode === 'cloud' && selectedCaseDetail && (
+          {activeView === 'settings' && (
+            <div className="mx-auto grid w-full max-w-5xl gap-4">
+              <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xs text-lexai-muted">离线运行</div>
+                    <div className="mt-1 text-lg font-semibold text-lexai-text">{providerLabel} · {localInference.model}</div>
+                    <p className="mt-2 text-sm leading-6 text-lexai-muted">
+                      管理离线引擎、模型目录和本地工作偏好。这里负责配置，不打断日常工作台。
+                    </p>
+                  </div>
+                  <button onClick={() => void loadLocalInferenceStatus()} className="rounded-xl border border-lexai-border px-3 py-2 text-xs text-lexai-muted hover:text-lexai-text">刷新状态</button>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-2 py-1 text-[11px] ${localInference.healthy ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{localHealthLabel}</span>
+                  <span className="rounded-full bg-slate-800 px-2 py-1 text-[11px] text-lexai-muted">{providerLabel}</span>
+                  {localStatusLoading && <span className="text-[11px] text-lexai-muted">检测中...</span>}
+                </div>
+                <p className="mt-3 text-[11px] leading-5 text-lexai-muted">
+                  {localInference.enabled ? `服务 ${localInference.baseUrl}${localInference.pid ? ` · 进程 ${localInference.pid}` : ''}` : '尚未配置离线引擎，可继续使用云端模式。'}
+                </p>
+                {localInference.lastError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{localInference.lastError}</p>}
+              </div>
+
+              <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-lexai-muted">模型管理</div>
+                    <div className="mt-1 text-lg font-semibold text-lexai-text">离线模型目录</div>
+                    <p className="mt-2 text-sm leading-6 text-lexai-muted">推荐模型支持应用内下载。高级模型保留来源入口，方便后续手动部署。</p>
+                  </div>
+                  <button onClick={() => void loadLocalModelStatus()} className="rounded-xl border border-lexai-border px-3 py-2 text-xs text-lexai-muted hover:text-lexai-text">刷新目录</button>
+                </div>
+                <div className="mt-5 rounded-3xl border border-emerald-400/20 bg-emerald-500/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-300">当前配置</div>
+                      <div className="mt-1 text-sm font-medium text-lexai-text">{localModel.name}</div>
+                    </div>
+                    <span className={`rounded-full px-2 py-1 text-[11px] ${getLocalModelTone(localModel)}`}>{formatLocalModelState(localModel)}</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-[11px] text-lexai-muted">
+                    <span>{formatFileSize(localModel.sizeBytes)} · 推荐内存 {localModel.recommendedRamGb} GB</span>
+                    <span>{formatFileSize(localModel.downloadedBytes)} / {formatFileSize(localModel.sizeBytes)}</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-lexai-surface">
+                    <div className="h-2 rounded-full bg-emerald-400 transition-all" style={{ width: `${localModelProgress}%` }} />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="text-[11px] text-lexai-muted">
+                      {localModel.state === 'downloading' && localModel.speedBytesPerSecond
+                        ? `${formatFileSize(localModel.speedBytesPerSecond)}/s${formatEta(localModel.etaSeconds) ? ` · 剩余 ${formatEta(localModel.etaSeconds)}` : ''}`
+                        : '默认离线模型'}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => void handleLocalModelDownload()}
+                        disabled={localModelLoading || (!localModel.sourceUrl && localModel.state === 'not_installed')}
+                        className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
+                          localModelLoading || (!localModel.sourceUrl && localModel.state === 'not_installed')
+                            ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70'
+                            : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
+                        }`}
+                      >
+                        {localModel.state === 'downloading' ? '暂停下载' : localModel.state === 'paused' ? '继续下载' : localModel.state === 'installed' ? '已安装' : '下载模型'}
+                      </button>
+                      {localModel.state !== 'not_installed' && (
+                        <button onClick={() => void handleDeleteLocalModel()} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200">
+                          删除
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {localModel.warning && <p className="mt-2 text-[11px] leading-5 text-amber-300">{localModel.warning}</p>}
+                  {localModel.lastError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{localModel.lastError}</p>}
+                </div>
+                <div className="mt-4 space-y-3">
+                  {localModelCatalog.map((model) => {
+                    const isPrimaryModel = model.id === localModel.id;
+                    const progress = model.sizeBytes > 0
+                      ? Math.min((model.downloadedBytes / model.sizeBytes) * 100, 100)
+                      : 0;
+                    return (
+                      <div key={model.id} className="rounded-3xl border border-white/10 bg-slate-900/40 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-sm font-medium text-lexai-text">{model.name}</div>
+                              {model.recommended && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">推荐</span>}
+                              {model.experimental && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">高级</span>}
+                            </div>
+                            <p className="mt-1 text-[11px] leading-5 text-lexai-muted">{model.summary}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-lexai-muted">
+                              <span>{formatFileSize(model.sizeBytes)}</span>
+                              <span>推荐内存 {model.recommendedRamGb} GB</span>
+                              {model.supportsEmbeddedRuntime
+                                ? <span>支持应用内下载</span>
+                                : <span>需手动准备专用环境</span>}
+                            </div>
+                          </div>
+                          <span className={`rounded-full px-2 py-1 text-[11px] ${getLocalModelTone(model)}`}>
+                            {formatLocalModelState(model)}
+                          </span>
+                        </div>
+                        {model.supportsEmbeddedRuntime && (
+                          <>
+                            <div className="mt-3 flex items-center justify-between text-[11px] text-lexai-muted">
+                              <span>{formatFileSize(model.downloadedBytes)} / {formatFileSize(model.sizeBytes)}</span>
+                              {model.state === 'downloading' && model.speedBytesPerSecond
+                                ? <span>{formatFileSize(model.speedBytesPerSecond)}/s{formatEta(model.etaSeconds) ? ` · 剩余 ${formatEta(model.etaSeconds)}` : ''}</span>
+                                : <span>{isPrimaryModel ? '当前默认模型' : '可下载'}</span>}
+                            </div>
+                            <div className="mt-2 h-2 rounded-full bg-lexai-bg">
+                              <div className="h-2 rounded-full bg-sky-400 transition-all" style={{ width: `${progress}%` }} />
+                            </div>
+                          </>
+                        )}
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {isPrimaryModel && (
+                            <>
+                              <button
+                                onClick={() => void handleLocalModelDownload()}
+                                disabled={localModelLoading || (!model.sourceUrl && model.state === 'not_installed')}
+                                className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
+                                  localModelLoading || (!model.sourceUrl && model.state === 'not_installed')
+                                    ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70'
+                                    : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
+                                }`}
+                              >
+                                {model.state === 'downloading' ? '暂停下载' : model.state === 'paused' ? '继续下载' : model.state === 'installed' ? '已安装' : '下载模型'}
+                              </button>
+                              {model.state !== 'not_installed' && model.state !== 'unsupported' && (
+                                <button onClick={() => void handleDeleteLocalModel()} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200">
+                                  删除
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {model.sourcePageUrl && (
+                            <button onClick={() => void window.lexai.localModel.openLink(model.sourcePageUrl as string)} className="rounded-lg border border-lexai-border px-3 py-1.5 text-xs text-lexai-muted hover:text-lexai-text">
+                              官方页面
+                            </button>
+                          )}
+                          {model.sourceUrl && model.sourceUrl !== model.sourcePageUrl && (
+                            <button onClick={() => void window.lexai.localModel.openLink(model.sourceUrl as string)} className="rounded-lg border border-lexai-border px-3 py-1.5 text-xs text-lexai-muted hover:text-lexai-text">
+                              下载地址
+                            </button>
+                          )}
+                        </div>
+                        {model.lastError && !isPrimaryModel && <p className="mt-2 text-[11px] leading-5 text-amber-300">{model.lastError}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xs text-lexai-muted">本地工作偏好</div>
+                    <div className="mt-1 text-lg font-semibold text-lexai-text">{selectedTaskMode?.label || '当前分析模式'}</div>
+                    <p className="mt-2 text-sm leading-6 text-lexai-muted">
+                      为当前任务模式保存本地工作偏好。离线模式会优先读取这里的内容，再回退到内置模板。
+                    </p>
+                  </div>
+                </div>
+                {selectedSkill ? (
+                  <div className="mt-4 rounded-3xl border border-white/10 bg-slate-900/40 p-4">
+                    <div className="text-xs text-lexai-muted">{selectedTaskMode?.label || '当前分析模式'} · {selectedSkill.plugin}</div>
+                    <textarea
+                      value={practiceProfileDraft}
+                      onChange={(event) => setPracticeProfileDraft(event.target.value)}
+                      placeholder="为当前任务保存本地工作偏好。留空时将使用内置模板。"
+                      className="mt-3 h-40 w-full resize-none rounded-2xl border border-lexai-border bg-lexai-surface px-4 py-3 text-sm leading-6 text-lexai-text placeholder-lexai-muted focus:border-lexai-primary focus:outline-none"
+                    />
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-lexai-muted">{practiceProfileLoading ? '加载中...' : '仅在本机离线模式下生效'}</div>
+                      <button
+                        onClick={() => void handleSavePracticeProfile()}
+                        disabled={practiceProfileSaving || practiceProfileLoading}
+                        className={`rounded-xl px-4 py-2 text-xs transition-colors ${
+                          practiceProfileSaving || practiceProfileLoading ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70' : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
+                        }`}
+                      >
+                        {practiceProfileSaving ? '保存中...' : '保存偏好'}
+                      </button>
+                    </div>
+                    {practiceProfileMessage && <div className="mt-2 text-[11px] text-lexai-muted">{practiceProfileMessage}</div>}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-3xl border border-dashed border-white/10 bg-slate-900/30 p-4 text-sm leading-6 text-lexai-muted">
+                    先在工作台里选择一个任务模式，这里就会显示对应的本地工作偏好设置。
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeView === 'workspace' && runtimeMode === 'cloud' && selectedCaseDetail && (
             <div className="mx-auto mb-4 grid w-full max-w-5xl gap-4 lg:grid-cols-[1.1fr,0.9fr]">
               <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
                 <div className="flex items-start justify-between gap-4">
@@ -1445,7 +1527,7 @@ function App() {
             </div>
           )}
 
-          {runtimeMode === 'cloud' && (
+          {activeView === 'workspace' && runtimeMode === 'cloud' && (
             <div className="mx-auto mb-4 w-full max-w-5xl rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -1482,7 +1564,7 @@ function App() {
             </div>
           )}
 
-          {runtimeMode === 'local' && activeAttachments.length > 0 && (
+          {activeView === 'workspace' && runtimeMode === 'local' && activeAttachments.length > 0 && (
             <div className="mx-auto mb-4 flex w-full max-w-5xl flex-wrap gap-2">
               {activeAttachments.map((attachment) => (
                 <button key={attachment.id} onClick={() => void window.lexai.localDocument.open(attachment.storedPath)} className="rounded-xl border border-lexai-border bg-lexai-surface px-3 py-2 text-left hover:border-lexai-primary/40">
@@ -1493,7 +1575,7 @@ function App() {
             </div>
           )}
 
-          {conversation.length === 0 ? (
+          {activeView === 'workspace' && (conversation.length === 0 ? (
             <div className="py-12 text-center text-lexai-muted">
               <p className="text-lg">欢迎使用 LexAI Desktop</p>
               <p className="mt-2 text-sm">直接描述你的任务，系统会自动选择分析模式；本地模式下也支持拖拽文件补充上下文。</p>
@@ -1535,10 +1617,11 @@ function App() {
               ))}
               {sending && <div className="mr-auto max-w-[85%] rounded-2xl border border-lexai-border bg-lexai-surface px-4 py-3 text-sm text-lexai-muted">正在生成回复...</div>}
             </div>
-          )}
+          ))}
         </div>
 
-        <div className="border-t border-lexai-border bg-lexai-surface p-4">
+        {activeView === 'workspace' && (
+          <div className="border-t border-lexai-border bg-lexai-surface p-4">
             <div className="mx-auto max-w-5xl">
             <div className="mb-4 flex flex-wrap gap-2">
               <button
@@ -1629,8 +1712,9 @@ function App() {
                 </div>
               </div>
             </div>
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
