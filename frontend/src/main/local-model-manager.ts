@@ -10,12 +10,17 @@ export interface ManagedLocalModelStatus {
   fileName: string;
   sizeBytes: number;
   recommendedRamGb: number;
-  state: 'not_installed' | 'downloading' | 'paused' | 'installed';
+  state: 'not_installed' | 'downloading' | 'paused' | 'installed' | 'unsupported';
   downloadedBytes: number;
   speedBytesPerSecond?: number;
   etaSeconds?: number;
   filePath?: string;
   sourceUrl?: string;
+  sourcePageUrl?: string;
+  recommended?: boolean;
+  experimental?: boolean;
+  supportsEmbeddedRuntime?: boolean;
+  summary?: string;
   warning?: string;
   lastError?: string;
 }
@@ -34,6 +39,51 @@ const MODEL_FILE = 'Qwen2.5-7B-Instruct-Q4_K_M.gguf';
 const MODEL_SIZE_BYTES = 5 * 1024 * 1024 * 1024;
 const RECOMMENDED_RAM_GB = 16;
 
+interface LocalModelDefinition {
+  id: string;
+  name: string;
+  provider: 'embedded';
+  fileName: string;
+  sizeBytes: number;
+  recommendedRamGb: number;
+  recommended: boolean;
+  experimental: boolean;
+  supportsEmbeddedRuntime: boolean;
+  summary: string;
+  sourcePageUrl: string;
+  directDownloadUrl?: string;
+}
+
+const MODEL_CATALOG: LocalModelDefinition[] = [
+  {
+    id: MODEL_ID,
+    name: 'Qwen2.5-7B-Instruct-Q4_K_M',
+    provider: 'embedded',
+    fileName: MODEL_FILE,
+    sizeBytes: MODEL_SIZE_BYTES,
+    recommendedRamGb: RECOMMENDED_RAM_GB,
+    recommended: true,
+    experimental: false,
+    supportsEmbeddedRuntime: true,
+    summary: '推荐给大多数用户，约 5 GB，16 GB 内存即可稳定本地运行。',
+    sourcePageUrl: 'https://www.modelscope.cn/models/Qwen/Qwen2.5-7B-Instruct-GGUF',
+  },
+  {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek-V4-Flash',
+    provider: 'embedded',
+    fileName: 'DeepSeek-V4-Flash-GGUF',
+    sizeBytes: 81 * 1024 * 1024 * 1024,
+    recommendedRamGb: 96,
+    recommended: false,
+    experimental: true,
+    supportsEmbeddedRuntime: false,
+    summary: '实验性选项。模型体积和显存/内存需求远高于 Qwen，当前桌面端 embedded runtime 不支持一键离线运行。',
+    sourcePageUrl: 'https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash',
+    directDownloadUrl: 'https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF',
+  },
+];
+
 export class LocalModelManager {
   private downloadAbortController: AbortController | null = null;
   private downloadSnapshot: DownloadSnapshot | null = null;
@@ -44,8 +94,12 @@ export class LocalModelManager {
     private readonly sourceUrl?: string,
   ) {}
 
+  private get primaryModel(): LocalModelDefinition {
+    return MODEL_CATALOG[0];
+  }
+
   private get modelPath(): string {
-    return path.join(this.rootDir, MODEL_FILE);
+    return path.join(this.rootDir, this.primaryModel.fileName);
   }
 
   private get partialPath(): string {
@@ -67,46 +121,72 @@ export class LocalModelManager {
 
   private getWarning(): string | undefined {
     const ramGb = os.totalmem() / 1024 / 1024 / 1024;
-    if (ramGb < RECOMMENDED_RAM_GB) {
-      return `检测到内存约 ${ramGb.toFixed(1)} GB，低于推荐的 ${RECOMMENDED_RAM_GB} GB，本地推理可能较慢。`;
+    if (ramGb < this.primaryModel.recommendedRamGb) {
+      return `检测到内存约 ${ramGb.toFixed(1)} GB，低于推荐的 ${this.primaryModel.recommendedRamGb} GB，本地推理可能较慢。`;
     }
     return undefined;
   }
 
-  async getStatus(): Promise<ManagedLocalModelStatus> {
+  async listModels(): Promise<ManagedLocalModelStatus[]> {
     await this.ensureRootDir();
 
     const installedBytes = await this.getFileSize(this.modelPath);
     const partialBytes = await this.getFileSize(this.partialPath);
-    const downloadState = this.downloadSnapshot?.state;
-    const downloadedBytes = installedBytes > 0 ? installedBytes : partialBytes;
-    const state: ManagedLocalModelStatus['state'] = installedBytes > 0
+    const activeState = installedBytes > 0
       ? 'installed'
-      : downloadState === 'downloading'
+      : this.downloadSnapshot?.state === 'downloading'
         ? 'downloading'
-        : downloadState === 'paused'
+        : this.downloadSnapshot?.state === 'paused'
           ? 'paused'
           : 'not_installed';
 
-    return {
-      id: MODEL_ID,
-      name: 'Qwen2.5-7B-Instruct-Q4_K_M',
-      provider: 'embedded',
-      fileName: MODEL_FILE,
-      sizeBytes: MODEL_SIZE_BYTES,
-      recommendedRamGb: RECOMMENDED_RAM_GB,
-      state,
-      downloadedBytes: this.downloadSnapshot?.downloadedBytes ?? downloadedBytes,
-      speedBytesPerSecond: this.downloadSnapshot?.speedBytesPerSecond,
-      etaSeconds: this.downloadSnapshot?.etaSeconds,
-      filePath: installedBytes > 0 ? this.modelPath : undefined,
-      sourceUrl: this.sourceUrl,
-      warning: this.getWarning(),
-      lastError: this.lastError,
-    };
+    return MODEL_CATALOG.map((definition) => {
+      const isPrimary = definition.id === this.primaryModel.id;
+      const downloadedBytes = isPrimary
+        ? (installedBytes > 0 ? installedBytes : partialBytes)
+        : 0;
+
+      return {
+        id: definition.id,
+        name: definition.name,
+        provider: definition.provider,
+        fileName: definition.fileName,
+        sizeBytes: definition.sizeBytes,
+        recommendedRamGb: definition.recommendedRamGb,
+        state: definition.supportsEmbeddedRuntime
+          ? activeState
+          : 'unsupported',
+        downloadedBytes: isPrimary
+          ? (this.downloadSnapshot?.downloadedBytes ?? downloadedBytes)
+          : 0,
+        speedBytesPerSecond: isPrimary ? this.downloadSnapshot?.speedBytesPerSecond : undefined,
+        etaSeconds: isPrimary ? this.downloadSnapshot?.etaSeconds : undefined,
+        filePath: isPrimary && installedBytes > 0 ? this.modelPath : undefined,
+        sourceUrl: isPrimary ? (this.sourceUrl || definition.directDownloadUrl) : definition.directDownloadUrl,
+        sourcePageUrl: definition.sourcePageUrl,
+        recommended: definition.recommended,
+        experimental: definition.experimental,
+        supportsEmbeddedRuntime: definition.supportsEmbeddedRuntime,
+        summary: definition.summary,
+        warning: isPrimary ? this.getWarning() : undefined,
+        lastError: isPrimary ? this.lastError : definition.supportsEmbeddedRuntime
+          ? undefined
+          : '当前桌面端 embedded runtime 暂不支持该模型的一键离线运行。',
+      };
+    });
   }
 
-  async startDownload(): Promise<ManagedLocalModelStatus> {
+  async getStatus(): Promise<ManagedLocalModelStatus> {
+    const [primaryStatus] = await this.listModels();
+    return primaryStatus;
+  }
+
+  async startDownload(modelId = this.primaryModel.id): Promise<ManagedLocalModelStatus> {
+    if (modelId !== this.primaryModel.id) {
+      this.lastError = '当前桌面端 embedded runtime 仅支持一键下载并运行推荐的 Qwen 本地模型。';
+      return (await this.listModels()).find((item) => item.id === modelId) ?? this.getStatus();
+    }
+
     if (!this.sourceUrl) {
       this.lastError = '未配置 LOCAL_LLM_MODEL_URL，无法下载内嵌模型文件。';
       return this.getStatus();
@@ -142,7 +222,11 @@ export class LocalModelManager {
     return this.getStatus();
   }
 
-  async deleteModel(): Promise<ManagedLocalModelStatus> {
+  async deleteModel(modelId = this.primaryModel.id): Promise<ManagedLocalModelStatus> {
+    if (modelId !== this.primaryModel.id) {
+      return (await this.listModels()).find((item) => item.id === modelId) ?? this.getStatus();
+    }
+
     await this.pauseDownload();
     await fsPromises.rm(this.modelPath, { force: true });
     await fsPromises.rm(this.partialPath, { force: true });

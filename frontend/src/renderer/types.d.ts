@@ -20,12 +20,17 @@ export interface ManagedLocalModelStatus {
   fileName: string;
   sizeBytes: number;
   recommendedRamGb: number;
-  state: 'not_installed' | 'downloading' | 'paused' | 'installed';
+  state: 'not_installed' | 'downloading' | 'paused' | 'installed' | 'unsupported';
   downloadedBytes: number;
   speedBytesPerSecond?: number;
   etaSeconds?: number;
   filePath?: string;
   sourceUrl?: string;
+  sourcePageUrl?: string;
+  recommended?: boolean;
+  experimental?: boolean;
+  supportsEmbeddedRuntime?: boolean;
+  summary?: string;
   warning?: string;
   lastError?: string;
 }
@@ -191,9 +196,11 @@ export interface LexaiBridge {
   };
   localModel: {
     getStatus: () => Promise<ManagedLocalModelStatus>;
+    list: () => Promise<ManagedLocalModelStatus[]>;
     startDownload: () => Promise<ManagedLocalModelStatus>;
     pauseDownload: () => Promise<ManagedLocalModelStatus>;
     delete: () => Promise<ManagedLocalModelStatus>;
+    openLink: (url: string) => Promise<{ ok: true }>;
   };
   authSession: {
     get: () => Promise<AuthSessionState>;

@@ -174,6 +174,7 @@ function App() {
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('cloud');
   const [localInference, setLocalInference] = useState<LocalInferenceStatus>(defaultLocalInferenceStatus);
   const [localModel, setLocalModel] = useState<ManagedLocalModelStatus>(defaultLocalModelStatus);
+  const [localModelCatalog, setLocalModelCatalog] = useState<ManagedLocalModelStatus[]>([defaultLocalModelStatus]);
   const [localStatusLoading, setLocalStatusLoading] = useState(false);
   const [localModelLoading, setLocalModelLoading] = useState(false);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
@@ -235,12 +236,21 @@ function App() {
   async function loadLocalModelStatus() {
     setLocalModelLoading(true);
     try {
-      setLocalModel(await window.lexai.localModel.getStatus());
+      const [status, catalog] = await Promise.all([
+        window.lexai.localModel.getStatus(),
+        window.lexai.localModel.list(),
+      ]);
+      setLocalModel(status);
+      setLocalModelCatalog(catalog);
     } catch (error) {
       setLocalModel({
         ...defaultLocalModelStatus,
         lastError: error instanceof Error ? error.message : String(error),
       });
+      setLocalModelCatalog([{
+        ...defaultLocalModelStatus,
+        lastError: error instanceof Error ? error.message : String(error),
+      }]);
     } finally {
       setLocalModelLoading(false);
     }
@@ -509,12 +519,29 @@ function App() {
     setLocalModel(localModel.state === 'downloading'
       ? await window.lexai.localModel.pauseDownload()
       : await window.lexai.localModel.startDownload());
+    await loadLocalModelStatus();
   }
 
   async function handleDeleteLocalModel() {
     setLocalModel(await window.lexai.localModel.delete());
+    await loadLocalModelStatus();
     if (runtimeMode === 'local') {
       await handleRuntimeModeChange('cloud');
+    }
+  }
+
+  function formatLocalModelState(model: ManagedLocalModelStatus): string {
+    switch (model.state) {
+      case 'installed':
+        return '已安装';
+      case 'downloading':
+        return '下载中';
+      case 'paused':
+        return '已暂停';
+      case 'unsupported':
+        return '实验性';
+      default:
+        return '未安装';
     }
   }
 
@@ -858,7 +885,7 @@ function App() {
           <div className="mt-3 rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-xs text-lexai-muted">本地模型</div>
+                <div className="text-xs text-lexai-muted">当前本地模型</div>
                 <div className="mt-1 text-sm font-medium text-lexai-text">{localModel.name}</div>
               </div>
               <button onClick={() => void loadLocalModelStatus()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
@@ -893,6 +920,97 @@ function App() {
             </div>
             {localModel.warning && <p className="mt-2 text-[11px] leading-5 text-amber-300">{localModel.warning}</p>}
             {localModel.lastError && <p className="mt-2 text-[11px] leading-5 text-rose-300">{localModel.lastError}</p>}
+          </div>
+
+          <div className="mt-3 rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs text-lexai-muted">离线模型列表</div>
+                <div className="mt-1 text-sm font-medium text-lexai-text">给非技术用户准备的下载说明</div>
+              </div>
+              <button onClick={() => void loadLocalModelStatus()} className="rounded-md border border-lexai-border px-2 py-1 text-xs text-lexai-muted hover:text-lexai-text">刷新</button>
+            </div>
+            <div className="mt-3 space-y-3">
+              {localModelCatalog.map((model) => {
+                const isPrimaryModel = model.id === localModel.id;
+                const progress = model.sizeBytes > 0
+                  ? Math.min((model.downloadedBytes / model.sizeBytes) * 100, 100)
+                  : 0;
+                return (
+                  <div key={model.id} className="rounded-2xl border border-lexai-border bg-lexai-surface/40 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-sm font-medium text-lexai-text">{model.name}</div>
+                          {model.recommended && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">推荐</span>}
+                          {model.experimental && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">实验性</span>}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-5 text-lexai-muted">{model.summary}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[11px] ${
+                        model.state === 'installed'
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : model.state === 'unsupported'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-slate-500/20 text-slate-300'
+                      }`}
+                      >
+                        {formatLocalModelState(model)}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-lexai-muted">
+                      <span>{formatFileSize(model.sizeBytes)} · 推荐内存 {model.recommendedRamGb} GB</span>
+                      <span>{model.supportsEmbeddedRuntime ? `${formatFileSize(model.downloadedBytes)} / ${formatFileSize(model.sizeBytes)}` : '需单独下载'}</span>
+                    </div>
+                    {model.supportsEmbeddedRuntime && (
+                      <>
+                        <div className="mt-2 h-2 rounded-full bg-lexai-bg">
+                          <div className="h-2 rounded-full bg-sky-400 transition-all" style={{ width: `${progress}%` }} />
+                        </div>
+                        {model.state === 'downloading' && model.speedBytesPerSecond && (
+                          <p className="mt-2 text-[11px] text-lexai-muted">
+                            {formatFileSize(model.speedBytesPerSecond)}/s{formatEta(model.etaSeconds) ? ` · 剩余 ${formatEta(model.etaSeconds)}` : ''}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {isPrimaryModel && (
+                        <>
+                          <button
+                            onClick={() => void handleLocalModelDownload()}
+                            disabled={localModelLoading || (!model.sourceUrl && model.state === 'not_installed')}
+                            className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
+                              localModelLoading || (!model.sourceUrl && model.state === 'not_installed')
+                                ? 'cursor-not-allowed bg-lexai-primary/40 text-white/70'
+                                : 'bg-lexai-primary text-white hover:bg-lexai-primary/80'
+                            }`}
+                          >
+                            {model.state === 'downloading' ? '暂停下载' : model.state === 'paused' ? '继续下载' : model.state === 'installed' ? '已安装' : '一键下载'}
+                          </button>
+                          {model.state !== 'not_installed' && model.state !== 'unsupported' && (
+                            <button onClick={() => void handleDeleteLocalModel()} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200">
+                              删除
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {model.sourcePageUrl && (
+                        <button onClick={() => void window.lexai.localModel.openLink(model.sourcePageUrl as string)} className="rounded-lg border border-lexai-border px-3 py-1.5 text-xs text-lexai-muted hover:text-lexai-text">
+                          官方页面
+                        </button>
+                      )}
+                      {model.sourceUrl && model.sourceUrl !== model.sourcePageUrl && (
+                        <button onClick={() => void window.lexai.localModel.openLink(model.sourceUrl as string)} className="rounded-lg border border-lexai-border px-3 py-1.5 text-xs text-lexai-muted hover:text-lexai-text">
+                          下载地址
+                        </button>
+                      )}
+                    </div>
+                    {model.lastError && !isPrimaryModel && <p className="mt-2 text-[11px] leading-5 text-amber-300">{model.lastError}</p>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 

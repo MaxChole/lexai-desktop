@@ -413,6 +413,10 @@ ipcMain.handle('local-model:get-status', async () => {
   return localModelManager.getStatus();
 });
 
+ipcMain.handle('local-model:list', async () => {
+  return localModelManager.listModels();
+});
+
 ipcMain.handle('local-model:start-download', async () => {
   return localModelManager.startDownload();
 });
@@ -423,6 +427,11 @@ ipcMain.handle('local-model:pause-download', async () => {
 
 ipcMain.handle('local-model:delete', async () => {
   return localModelManager.deleteModel();
+});
+
+ipcMain.handle('local-model:open-link', async (_event, url: string) => {
+  await shell.openExternal(url);
+  return { ok: true };
 });
 
 ipcMain.handle('runtime-mode:get', async () => {

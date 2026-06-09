@@ -10,9 +10,11 @@ contextBridge.exposeInMainWorld('lexai', {
   },
   localModel: {
     getStatus: () => ipcRenderer.invoke('local-model:get-status'),
+    list: () => ipcRenderer.invoke('local-model:list'),
     startDownload: () => ipcRenderer.invoke('local-model:start-download'),
     pauseDownload: () => ipcRenderer.invoke('local-model:pause-download'),
     delete: () => ipcRenderer.invoke('local-model:delete'),
+    openLink: (url: string) => ipcRenderer.invoke('local-model:open-link', url),
   },
   authSession: {
     get: () => ipcRenderer.invoke('auth-session:get'),
