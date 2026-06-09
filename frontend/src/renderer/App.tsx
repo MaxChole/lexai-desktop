@@ -45,7 +45,6 @@ interface AgentItem {
   type: 'agent';
 }
 
-type CatalogItem = SkillItem | AgentItem;
 type Jurisdiction = 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL';
 type RuntimeMode = 'cloud' | 'local';
 
@@ -59,6 +58,15 @@ interface CaseFormState {
   title: string;
   description: string;
   tags: string;
+}
+
+interface TaskModeDefinition {
+  id: string;
+  label: string;
+  description: string;
+  jurisdictions: Jurisdiction[];
+  matchers: string[];
+  keywords: string[];
 }
 
 const defaultLocalInferenceStatus: LocalInferenceStatus = {
@@ -80,6 +88,49 @@ const defaultLocalModelStatus: ManagedLocalModelStatus = {
   state: 'not_installed',
   downloadedBytes: 0,
 };
+
+const TASK_MODES: TaskModeDefinition[] = [
+  {
+    id: 'contract-review',
+    label: '合同审查',
+    description: '识别条款风险、缺失义务和谈判重点。',
+    jurisdictions: ['CN', 'US', 'INT', 'ALL'],
+    matchers: ['review', 'contract', 'agreement', 'msa', 'nda'],
+    keywords: ['合同', '协议', '条款', '审查', 'review', 'agreement', 'contract', 'nda'],
+  },
+  {
+    id: 'document-summary',
+    label: '文档总结',
+    description: '快速提炼事实、结构和结论。',
+    jurisdictions: ['CN', 'US', 'INT', 'ALL'],
+    matchers: ['summar', 'digest', 'memo', 'brief'],
+    keywords: ['总结', '摘要', '概述', '梳理', 'summary', 'summarize', 'memo'],
+  },
+  {
+    id: 'risk-spotting',
+    label: '风险排查',
+    description: '聚焦合规、责任和潜在争议点。',
+    jurisdictions: ['CN', 'US', 'INT', 'ALL'],
+    matchers: ['risk', 'issue', 'compliance', 'due-diligence'],
+    keywords: ['风险', '合规', '问题', '争议', 'compliance', 'risk', 'issue'],
+  },
+  {
+    id: 'drafting',
+    label: '起草回复',
+    description: '生成邮件、条款或法律风格初稿。',
+    jurisdictions: ['CN', 'US', 'INT', 'ALL'],
+    matchers: ['draft', 'reply', 'write', 'email'],
+    keywords: ['起草', '回复', '邮件', '写一份', 'draft', 'reply', 'email'],
+  },
+  {
+    id: 'cross-border-compare',
+    label: '跨法域对照',
+    description: '并列比较中国法与美国法观点。',
+    jurisdictions: ['CROSS', 'ALL'],
+    matchers: ['cross:', 'cross-border', 'cn-us', 'pipl', 'gdpr', 'ccpa'],
+    keywords: ['中美', '跨境', '对照', '比较', 'PIPL', 'GDPR', 'CCPA', 'cross-border'],
+  },
+];
 
 function highlightVerificationText(text: string): ReactNode[] {
   const parts = text.split(/(\[需验证\]|\[verify\])/g);
@@ -169,7 +220,6 @@ function App() {
   const [skills, setSkills] = useState<SkillItem[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
   const [inputText, setInputText] = useState('');
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('cloud');
   const [localInference, setLocalInference] = useState<LocalInferenceStatus>(defaultLocalInferenceStatus);
@@ -211,6 +261,7 @@ function App() {
   const [agentMessage, setAgentMessage] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationState[]>([]);
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [selectedTaskModeId, setSelectedTaskModeId] = useState<string | null>(null);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -437,28 +488,10 @@ function App() {
       .finally(() => setPracticeProfileLoading(false));
   }, [selectedSkill]);
 
-  const catalog: CatalogItem[] = [
-    ...skills.map((item) => ({ ...item, type: 'skill' as const })),
-    ...agents.map((item) => ({ ...item, type: 'agent' as const })),
-  ];
-
-  const filtered = search
-    ? catalog.filter((item) =>
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        item.description.toLowerCase().includes(search.toLowerCase()) ||
-        item.plugin.toLowerCase().includes(search.toLowerCase()),
-      )
-    : catalog;
-
-  const slashQuery = inputText.startsWith('/') ? inputText.slice(1).trim().toLowerCase() : '';
-  const slashSuggestions = slashQuery
-    ? skills
-        .filter((skill) =>
-          `${skill.plugin}:${skill.name}`.toLowerCase().includes(slashQuery) ||
-          skill.description.toLowerCase().includes(slashQuery),
-        )
-        .slice(0, 6)
-    : [];
+  useEffect(() => {
+    if (!selectedTaskModeId) return;
+    setSelectedSkill(resolveSkillForTask(selectedTaskModeId));
+  }, [selectedTaskModeId, skills, jurisdiction]);
 
   const jurisdictionLabels: Record<string, string> = {
     CN: 'CN 中国法',
@@ -483,6 +516,59 @@ function App() {
   const localModelProgress = localModel.sizeBytes > 0
     ? Math.min((localModel.downloadedBytes / localModel.sizeBytes) * 100, 100)
     : 0;
+  const visibleTaskModes = TASK_MODES.filter((item) => item.jurisdictions.includes(jurisdiction) || item.jurisdictions.includes('ALL'));
+  const selectedTaskMode = visibleTaskModes.find((item) => item.id === selectedTaskModeId)
+    ?? TASK_MODES.find((item) => item.id === selectedTaskModeId)
+    ?? null;
+
+  function resolveSkillForTask(taskModeId: string | null): SkillItem | null {
+    if (!taskModeId) return null;
+    const task = TASK_MODES.find((item) => item.id === taskModeId);
+    if (!task) return null;
+
+    const normalizedJurisdiction = jurisdiction === 'ALL' ? null : jurisdiction;
+    const skillPool = skills.filter((skill) => {
+      if (!normalizedJurisdiction) return true;
+      return skill.jurisdiction === normalizedJurisdiction || skill.jurisdiction === 'ALL';
+    });
+
+    const matched = skillPool.find((skill) => {
+      const haystack = `${skill.id} ${skill.name} ${skill.plugin} ${skill.description}`.toLowerCase();
+      return task.matchers.some((matcher) => haystack.includes(matcher.toLowerCase()));
+    });
+
+    return matched ?? skillPool[0] ?? skills[0] ?? null;
+  }
+
+  function inferTaskMode(message: string): TaskModeDefinition | null {
+    const lowered = message.toLowerCase();
+    return visibleTaskModes.find((task) =>
+      task.keywords.some((keyword) => lowered.includes(keyword.toLowerCase())),
+    ) ?? null;
+  }
+
+  function getActiveSkill(message?: string): SkillItem | null {
+    if (selectedSkill) return selectedSkill;
+    if (selectedTaskModeId) return resolveSkillForTask(selectedTaskModeId);
+    const inferredTask = message ? inferTaskMode(message) : null;
+    return inferredTask ? resolveSkillForTask(inferredTask.id) : null;
+  }
+
+  function getTaskModeLabelFromSkillId(skillId?: string): string {
+    if (!skillId) return '自动分析';
+    const matched = skills.find((skill) => skill.id === skillId);
+    if (!matched) return '自动分析';
+    const task = TASK_MODES.find((item) => {
+      const haystack = `${matched.id} ${matched.name} ${matched.plugin} ${matched.description}`.toLowerCase();
+      return item.matchers.some((matcher) => haystack.includes(matcher.toLowerCase()));
+    });
+    return task?.label ?? '自动分析';
+  }
+
+  function activateTaskMode(taskModeId: string | null) {
+    setSelectedTaskModeId(taskModeId);
+    setSelectedSkill(resolveSkillForTask(taskModeId));
+  }
 
   function formatUpdatedAt(value: string): string {
     const date = new Date(value);
@@ -600,18 +686,21 @@ function App() {
   async function handleSend() {
     const trimmed = inputText.trim();
     if (!trimmed || sending) return;
+    const activeSkill = getActiveSkill(trimmed);
+    const activeTask = selectedTaskMode ?? inferTaskMode(trimmed);
 
-    if (trimmed.startsWith('/') && slashSuggestions.length > 0) {
-      setSelectedSkill(slashSuggestions[0]);
-      setInputText('');
-      return;
+    if (!selectedTaskModeId && activeTask) {
+      setSelectedTaskModeId(activeTask.id);
+    }
+    if (!selectedSkill && activeSkill) {
+      setSelectedSkill(activeSkill);
     }
 
     setSending(true);
     if (runtimeMode === 'cloud') {
       setConversation((current) => [
         ...current,
-        { role: 'user', content: trimmed, meta: selectedSkill ? `skill · ${selectedSkill.id}` : undefined },
+        { role: 'user', content: trimmed, meta: activeTask ? `${activeTask.label}模式` : '自动分析' },
       ]);
     }
     setInputText('');
@@ -619,7 +708,7 @@ function App() {
     try {
       const result: DesktopChatResponse = await window.lexai.chat.send(
         trimmed,
-        selectedSkill?.id,
+        activeSkill?.id,
         activeLocalConversationId ?? undefined,
         runtimeMode === 'cloud' ? selectedCaseId ?? undefined : undefined,
         runtimeMode === 'cloud' ? cloudSessionId ?? undefined : undefined,
@@ -813,7 +902,7 @@ function App() {
     setConversation(session.messages.map((message) => ({
       role: message.role,
       content: message.content,
-      meta: message.role === 'assistant' ? `${session.model}${session.skillId ? ` · ${session.skillId}` : ''}` : undefined,
+      meta: message.role === 'assistant' ? `${session.model}${session.skillId ? ` · ${getTaskModeLabelFromSkillId(session.skillId)}` : ''}` : undefined,
     })));
   }
 
@@ -1116,35 +1205,40 @@ function App() {
             </div>
           )}
 
-          <div className="mb-2 mt-2 text-xs text-lexai-muted">Skills & Agents ({filtered.length})</div>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索 skill 或 agent"
-            className="mb-3 w-full rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none"
-          />
-          {loading && <div className="text-xs text-lexai-muted animate-pulse">加载中...</div>}
-          {!loading && filtered.map((item) => (
-            <div
-              key={`${item.type}-${item.id}`}
-              className={`mb-1 cursor-pointer rounded px-3 py-2 transition-colors ${
-                item.type === 'agent'
-                  ? 'border-l-2 border-lexai-accent hover:bg-lexai-bg'
-                  : selectedSkill?.id === item.id
-                    ? 'border border-lexai-primary bg-lexai-primary/10'
-                    : 'hover:bg-lexai-bg'
+          <div className="mb-2 mt-2 text-xs text-lexai-muted">任务模式</div>
+          <div className="rounded-2xl border border-lexai-border bg-lexai-bg/70 p-3">
+            <button
+              onClick={() => activateTaskMode(null)}
+              className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                selectedTaskModeId === null
+                  ? 'border-lexai-primary bg-lexai-primary/10'
+                  : 'border-lexai-border bg-lexai-surface/40 hover:border-lexai-primary/40'
               }`}
-              onClick={() => {
-                if (item.type === 'skill') setSelectedSkill(item);
-              }}
             >
-              <div className="flex items-center gap-2">
-                <span className={`rounded px-1.5 py-0.5 text-xs ${item.type === 'agent' ? 'bg-lexai-accent/20 text-lexai-accent' : 'bg-lexai-primary/20 text-lexai-primary'}`}>{item.type === 'agent' ? 'Agent' : 'Skill'}</span>
-                <span className="text-sm font-medium text-lexai-text">/{item.name}</span>
-              </div>
-              <p className="mt-0.5 line-clamp-2 text-xs text-lexai-muted">{item.description}</p>
+              <div className="text-sm font-medium text-lexai-text">自动分析</div>
+              <p className="mt-1 text-[11px] leading-5 text-lexai-muted">根据问题内容、附件和当前法域自动挑选合适的分析工作流。</p>
+            </button>
+            <div className="mt-3 space-y-2">
+              {loading ? (
+                <div className="text-[11px] text-lexai-muted animate-pulse">加载任务模式中...</div>
+              ) : (
+                visibleTaskModes.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => activateTaskMode(task.id)}
+                    className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                      selectedTaskModeId === task.id
+                        ? 'border-lexai-primary bg-lexai-primary/10'
+                        : 'border-lexai-border bg-lexai-surface/40 hover:border-lexai-primary/40'
+                    }`}
+                  >
+                    <div className="text-sm font-medium text-lexai-text">{task.label}</div>
+                    <p className="mt-1 text-[11px] leading-5 text-lexai-muted">{task.description}</p>
+                  </button>
+                ))
+              )}
             </div>
-          ))}
+          </div>
         </div>
 
         <div className="border-t border-lexai-border px-4 py-3">
@@ -1198,12 +1292,12 @@ function App() {
             ) : (
               localConversations.map((storedConversation) => (
                 <div key={storedConversation.id} className={`rounded-xl border p-3 ${activeLocalConversationId === storedConversation.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-lexai-border bg-lexai-bg/70'}`}>
-                  <button onClick={() => void openLocalConversation(storedConversation.id)} className="w-full text-left">
-                    <div className="truncate text-xs font-medium text-lexai-text">{storedConversation.title}</div>
-                    <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(storedConversation.updatedAt)} · {storedConversation.messageCount} 条消息 · {storedConversation.attachmentCount} 个附件</div>
-                  </button>
+                    <button onClick={() => void openLocalConversation(storedConversation.id)} className="w-full text-left">
+                      <div className="truncate text-xs font-medium text-lexai-text">{storedConversation.title}</div>
+                      <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(storedConversation.updatedAt)} · {storedConversation.messageCount} 条消息 · {storedConversation.attachmentCount} 个附件</div>
+                    </button>
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="truncate text-[11px] text-lexai-muted">{storedConversation.skillId || '未绑定 skill'}</div>
+                    <div className="truncate text-[11px] text-lexai-muted">{getTaskModeLabelFromSkillId(storedConversation.skillId)}</div>
                     <button onClick={() => void handleDeleteLocalConversation(storedConversation.id)} className="text-[11px] text-rose-300 hover:text-rose-200">删除</button>
                   </div>
                 </div>
@@ -1213,10 +1307,10 @@ function App() {
         </div>
 
         <div className="border-t border-lexai-border px-4 py-3">
-          <div className="mb-2 text-xs text-lexai-muted">本地 Profile</div>
+          <div className="mb-2 text-xs text-lexai-muted">本地工作偏好</div>
           {selectedSkill ? (
             <div className="rounded-xl border border-lexai-border bg-lexai-bg/70 p-3">
-              <div className="text-xs text-lexai-muted">{selectedSkill.plugin}</div>
+              <div className="text-xs text-lexai-muted">{selectedTaskMode?.label || '当前分析模式'} · {selectedSkill.plugin}</div>
               <textarea
                 value={practiceProfileDraft}
                 onChange={(event) => setPracticeProfileDraft(event.target.value)}
@@ -1238,12 +1332,12 @@ function App() {
               {practiceProfileMessage && <div className="mt-2 text-[11px] text-lexai-muted">{practiceProfileMessage}</div>}
             </div>
           ) : (
-            <div className="text-[11px] leading-5 text-lexai-muted">先在上方选择一个 Skill，再为对应插件编辑本地 practice profile。</div>
+            <div className="text-[11px] leading-5 text-lexai-muted">选择一个任务模式后，这里可以保存对应插件的本地工作偏好。</div>
           )}
         </div>
 
         <div className="border-t border-lexai-border p-4 text-xs text-lexai-muted">
-          v0.1.0 · {skills.length} Skills · {agents.length} Agents
+          v0.1.0 · {skills.length} 分析能力 · {agents.length} Agents
         </div>
       </aside>
 
@@ -1254,9 +1348,9 @@ function App() {
             {runtimeMode === 'local' && activeLocalConversationId && <span className="text-xs text-lexai-muted">已载入本地会话</span>}
             <span className="rounded bg-lexai-primary/20 px-2 py-0.5 text-xs text-lexai-primary">{jurisdictionLabels[jurisdiction]}</span>
             <span className={`rounded px-2 py-0.5 text-xs ${modePillClass}`}>{runtimeMode === 'local' ? '本地模式' : '云端模式'}</span>
-            {selectedSkill && (
-              <button onClick={() => setSelectedSkill(null)} className="rounded border border-lexai-primary/30 bg-lexai-primary/10 px-2 py-0.5 text-xs text-lexai-primary">
-                /{selectedSkill.plugin}:{selectedSkill.name}
+            {(selectedTaskMode || selectedSkill) && (
+              <button onClick={() => activateTaskMode(null)} className="rounded border border-lexai-primary/30 bg-lexai-primary/10 px-2 py-0.5 text-xs text-lexai-primary">
+                {selectedTaskMode?.label || '自动分析'}
               </button>
             )}
           </div>
@@ -1323,7 +1417,7 @@ function App() {
                 <div className="text-xs text-lexai-muted">会话历史搜索</div>
                 <div className="mt-3 grid gap-2">
                   <input value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value)} placeholder="关键词" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none" />
-                  <input value={sessionSkillFilter} onChange={(event) => setSessionSkillFilter(event.target.value)} placeholder="Skill 名" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none" />
+                  <input value={sessionSkillFilter} onChange={(event) => setSessionSkillFilter(event.target.value)} placeholder="分析模式" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text placeholder-lexai-muted outline-none" />
                   <div className="grid grid-cols-2 gap-2">
                     <input value={sessionDateFrom} onChange={(event) => setSessionDateFrom(event.target.value)} type="date" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text outline-none" />
                     <input value={sessionDateTo} onChange={(event) => setSessionDateTo(event.target.value)} type="date" className="rounded-xl border border-lexai-border bg-lexai-bg px-3 py-2 text-sm text-lexai-text outline-none" />
@@ -1338,7 +1432,7 @@ function App() {
                     selectedCaseDetail.sessions.map((session) => (
                       <button key={session.id} onClick={() => openCloudSession(session.id)} className={`w-full rounded-2xl border px-3 py-3 text-left ${cloudSessionId === session.id ? 'border-lexai-primary bg-lexai-primary/10' : 'border-lexai-border bg-lexai-bg/50'}`}>
                         <div className="truncate text-sm font-medium text-lexai-text">{session.title || '未命名会话'}</div>
-                        <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(session.updatedAt)} · {session.skillId || session.model}</div>
+                        <div className="mt-1 text-[11px] text-lexai-muted">{formatUpdatedAt(session.updatedAt)} · {getTaskModeLabelFromSkillId(session.skillId) || session.model}</div>
                       </button>
                     ))
                   )}
@@ -1398,28 +1492,26 @@ function App() {
           {conversation.length === 0 ? (
             <div className="py-12 text-center text-lexai-muted">
               <p className="text-lg">欢迎使用 LexAI Desktop</p>
-              <p className="mt-2 text-sm">输入 <code className="rounded bg-lexai-surface px-1">/</code> 可触发 Slash Command，拖拽文件到窗口可在本地模式添加附件。</p>
+              <p className="mt-2 text-sm">直接描述你的任务，系统会自动选择分析模式；本地模式下也支持拖拽文件补充上下文。</p>
               <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-lexai-border bg-lexai-surface px-4 py-2 text-xs">
                 <span className={runtimeMode === 'local' ? 'text-emerald-300' : 'text-sky-300'}>{runtimeMode === 'local' ? '当前走本地推理链路' : '当前走云端模型链路'}</span>
                 <span className="text-lexai-muted">{runtimeMode === 'local' ? `${providerLabel} · ${localInference.model}` : 'Claude / DeepSeek / Kimi'}</span>
               </div>
-              <div className="mx-auto mt-6 grid max-w-2xl grid-cols-2 gap-4">
-                <div className="rounded-2xl bg-lexai-surface p-4 text-left text-sm text-lexai-text">
-                  <span className="font-bold text-lexai-primary">Slash Command</span>
-                  <p className="mt-1 text-xs text-lexai-muted">按当前法律体系过滤技能，快速切换到对应审查工作流。</p>
-                </div>
-                <div className="rounded-2xl bg-lexai-surface p-4 text-left text-sm text-lexai-text">
-                  <span className="font-bold text-lexai-accent">Markdown 响应</span>
-                  <p className="mt-1 text-xs text-lexai-muted">支持代码块和验证标记高亮，适合法规、条款和风险输出。</p>
-                </div>
-                <div className="rounded-2xl bg-lexai-surface p-4 text-left text-sm text-lexai-text">
-                  <span className="font-bold text-emerald-300">本地附件</span>
-                  <p className="mt-1 text-xs text-lexai-muted">拖拽或点击添加 TXT/PDF/Word/TXT 文件，本地模式会自动利用这些上下文。</p>
-                </div>
-                <div className="rounded-2xl bg-lexai-surface p-4 text-left text-sm text-lexai-text">
-                  <span className="font-bold text-amber-300">验证提醒</span>
-                  <p className="mt-1 text-xs text-lexai-muted">`[需验证]` 和 `[verify]` 会在回复中直接高亮，方便人工复核。</p>
-                </div>
+              <div className="mx-auto mt-6 grid max-w-3xl grid-cols-2 gap-4">
+                {visibleTaskModes.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => activateTaskMode(task.id)}
+                    className={`rounded-2xl border p-4 text-left transition-colors ${
+                      selectedTaskModeId === task.id
+                        ? 'border-lexai-primary bg-lexai-primary/10'
+                        : 'border-lexai-border bg-lexai-surface hover:border-lexai-primary/40'
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-lexai-text">{task.label}</div>
+                    <p className="mt-2 text-xs leading-6 text-lexai-muted">{task.description}</p>
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
@@ -1443,7 +1535,32 @@ function App() {
         </div>
 
         <div className="border-t border-lexai-border bg-lexai-surface p-4">
-          <div className="mx-auto max-w-5xl">
+            <div className="mx-auto max-w-5xl">
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                onClick={() => activateTaskMode(null)}
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  selectedTaskModeId === null
+                    ? 'border-lexai-primary bg-lexai-primary/10 text-lexai-primary'
+                    : 'border-lexai-border text-lexai-muted hover:text-lexai-text'
+                }`}
+              >
+                自动分析
+              </button>
+              {visibleTaskModes.map((task) => (
+                <button
+                  key={task.id}
+                  onClick={() => activateTaskMode(task.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                    selectedTaskModeId === task.id
+                      ? 'border-lexai-primary bg-lexai-primary/10 text-lexai-primary'
+                      : 'border-lexai-border text-lexai-muted hover:text-lexai-text'
+                  }`}
+                >
+                  {task.label}
+                </button>
+              ))}
+            </div>
             {usageSummary && usageSummary.usagePercent >= usageSummary.warningThreshold && (
               <div className={`mb-3 rounded-2xl border px-4 py-3 text-sm ${
                 usageSummary.usagePercent >= usageSummary.hardLimit
@@ -1455,28 +1572,6 @@ function App() {
                   : '本月用量已超过 80%，建议留意剩余额度。'}
               </div>
             )}
-            {slashSuggestions.length > 0 && (
-              <div className="mb-3 rounded-2xl border border-lexai-border bg-lexai-bg/90 p-2">
-                <div className="mb-2 px-2 text-[11px] uppercase tracking-wide text-lexai-muted">Slash Command</div>
-                {slashSuggestions.map((skill) => (
-                  <button
-                    key={skill.id}
-                    onClick={() => {
-                      setSelectedSkill(skill);
-                      setInputText('');
-                    }}
-                    className="flex w-full items-start justify-between rounded-xl px-3 py-2 text-left hover:bg-lexai-surface"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-lexai-text">/{skill.name}</div>
-                      <div className="mt-1 text-xs text-lexai-muted">{skill.description}</div>
-                    </div>
-                    <span className="ml-3 rounded bg-lexai-primary/15 px-2 py-1 text-[11px] text-lexai-primary">{skill.plugin}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
             <div className={`rounded-3xl border px-4 py-4 ${isDragActive ? 'border-sky-400 bg-sky-400/10' : 'border-lexai-border bg-lexai-bg/50'}`}>
               <div className="flex items-end gap-3">
                 <button
@@ -1499,7 +1594,7 @@ function App() {
                       void handleSend();
                     }
                   }}
-                  placeholder="输入消息，或以 / 开头搜索技能..."
+                  placeholder="描述你的任务，系统会自动选择合适的分析模式..."
                   rows={3}
                   className="min-h-[84px] flex-1 resize-none rounded-2xl border border-lexai-border bg-lexai-surface px-4 py-3 text-sm text-lexai-text placeholder-lexai-muted focus:border-lexai-primary focus:outline-none"
                 />
@@ -1519,7 +1614,7 @@ function App() {
                 <div>
                   {runtimeMode === 'local' && activeAttachments.length > 0
                     ? `当前本地会话已绑定 ${activeAttachments.length} 个附件；TXT/Markdown 会自动注入文本片段。`
-                    : 'AI 生成内容仅供参考，不构成法律意见。[需验证] 与 [verify] 会在回复中高亮。'}
+                    : `${selectedTaskMode?.label || '自动分析'}已启用；AI 生成内容仅供参考，不构成法律意见。`}
                 </div>
                 <div className="shrink-0">
                   {runtimeMode === 'local'
