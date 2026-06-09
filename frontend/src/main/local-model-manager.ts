@@ -67,6 +67,7 @@ const MODEL_CATALOG: LocalModelDefinition[] = [
     supportsEmbeddedRuntime: true,
     summary: '推荐给大多数用户，约 5 GB，16 GB 内存即可稳定本地运行。',
     sourcePageUrl: 'https://www.modelscope.cn/models/Qwen/Qwen2.5-7B-Instruct-GGUF',
+    directDownloadUrl: 'https://modelscope.cn/api/v1/models/Qwen/Qwen2.5-7B-Instruct-GGUF/repo?Revision=master&FilePath=qwen2.5-7b-instruct-q4_k_m.gguf',
   },
   {
     id: 'deepseek-v4-flash',
@@ -96,6 +97,10 @@ export class LocalModelManager {
 
   private get primaryModel(): LocalModelDefinition {
     return MODEL_CATALOG[0];
+  }
+
+  private get primaryDownloadUrl(): string | undefined {
+    return this.sourceUrl || this.primaryModel.directDownloadUrl;
   }
 
   private get modelPath(): string {
@@ -162,7 +167,7 @@ export class LocalModelManager {
         speedBytesPerSecond: isPrimary ? this.downloadSnapshot?.speedBytesPerSecond : undefined,
         etaSeconds: isPrimary ? this.downloadSnapshot?.etaSeconds : undefined,
         filePath: isPrimary && installedBytes > 0 ? this.modelPath : undefined,
-        sourceUrl: isPrimary ? (this.sourceUrl || definition.directDownloadUrl) : definition.directDownloadUrl,
+        sourceUrl: isPrimary ? this.primaryDownloadUrl : definition.directDownloadUrl,
         sourcePageUrl: definition.sourcePageUrl,
         recommended: definition.recommended,
         experimental: definition.experimental,
@@ -187,8 +192,8 @@ export class LocalModelManager {
       return (await this.listModels()).find((item) => item.id === modelId) ?? this.getStatus();
     }
 
-    if (!this.sourceUrl) {
-      this.lastError = '未配置 LOCAL_LLM_MODEL_URL，无法下载内嵌模型文件。';
+    if (!this.primaryDownloadUrl) {
+      this.lastError = '未找到可用的本地模型下载源。';
       return this.getStatus();
     }
 
@@ -242,7 +247,7 @@ export class LocalModelManager {
         headers.Range = `bytes=${existingBytes}-`;
       }
 
-      const response = await fetch(this.sourceUrl as string, {
+      const response = await fetch(this.primaryDownloadUrl as string, {
         headers,
         signal: this.downloadAbortController?.signal,
       });
