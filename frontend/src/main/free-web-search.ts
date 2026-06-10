@@ -99,10 +99,13 @@ function getDomainWeight(hostname: string, jurisdiction: SearchJurisdiction): nu
       hostname.endsWith('.gov')
       || hostname.endsWith('.gov.uk')
       || hostname.endsWith('.europa.eu')
-      || hostname.endsWith('.org')
     ) {
       return 4;
     }
+  }
+
+  if (hostname.endsWith('.edu') || hostname.endsWith('.org')) {
+    return 1;
   }
 
   if (hostname.includes('wikipedia.org')) return 1;
@@ -172,6 +175,20 @@ function dedupeSources(sources: WebSearchSource[]): WebSearchSource[] {
     seen.add(item.url);
     return true;
   });
+}
+
+function extractEvidencePoint(snippet: string): string {
+  const normalized = normalizeWhitespace(snippet).replace(/^摘要[:：]\s*/u, '');
+  if (!normalized) {
+    return '未提供可用摘要。';
+  }
+
+  const segments = normalized
+    .split(/(?<=[。；;.!?])\s+/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return truncate(segments[0] || normalized, 180);
 }
 
 export class FreeWebSearch {
@@ -413,21 +430,22 @@ export class FreeWebSearch {
     }
 
     const sections = sources.map((item, index) => [
-      `Source ${index + 1} [来源${index + 1}]`,
-      `title: ${item.title}`,
-      `url: ${item.url}`,
-      `origin: ${item.source}`,
-      `authority: ${item.authority}`,
-      `snippet: ${item.snippet || '(no snippet)'}`,
+      `Evidence Card ${index + 1} [来源${index + 1}]`,
+      `标题: ${item.title}`,
+      `链接: ${item.url}`,
+      `来源类型: ${item.authority}`,
+      `抓取渠道: ${item.source}`,
+      `可直接援引的信息: ${extractEvidencePoint(item.snippet)}`,
+      `原始摘要: ${item.snippet || '(no snippet)'}`,
     ].join('\n'));
 
     return [
-      '# Web Search Context',
-      `query: ${query}`,
-      'Use these publicly retrieved references when they are relevant.',
-      'Prefer grounded statements, prefer official sources over secondary summaries, and mark uncertain points with [需验证].',
-      'When a statement is supported by a source, cite it inline as [来源1], [来源2], etc.',
-      'Do not present unsupported legal conclusions as certain.',
+      '# Legal Evidence Context',
+      `用户问题: ${query}`,
+      '以下是已经检索到的公开资料证据卡片，请优先依据这些材料回答。',
+      '优先使用官方来源；如只能从法条正文中归纳，请表述为“可从现有条文归纳的核心规则/要求”，不要虚构教科书式术语。',
+      '每个关键结论都应在句末标注 [来源1]、[来源2] 这类引用。',
+      '如果证据不足，请明确写出 [需验证]，不要把不确定结论写成确定意见。',
       '',
       sections.join('\n\n---\n\n'),
     ].join('\n');

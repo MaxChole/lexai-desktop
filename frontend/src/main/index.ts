@@ -270,10 +270,11 @@ function buildWebSearchInstruction(sources: WebSearchSource[]): string {
   }
 
   return [
-    '请优先依据已提供的公开资料回答。',
-    '对有明确依据的结论，请在句末用 [来源1]、[来源2] 这类格式标注引用。',
-    '如果资料不足以支持确定结论，请明确写出 [需验证]。',
-    '涉及法律结论时，优先引用官方来源，不要只复述二级资料。',
+    '请直接回答，不要重复用户原问题，也不要写“根据公开资料”这类空泛开场。',
+    '优先依据已提供的证据卡片作答，涉及法律结论时优先引用官方来源，不要只复述二级资料。',
+    '如果检索结果主要是法条正文，请写成“可从现有条文归纳的核心规则/要求”，不要凭空发明原则名称。',
+    '正文建议结构：先写一句简短结论，再用 2-4 个要点展开；每个要点都应包含“规则/要求 + 简短解释 + 句末引用”。',
+    '对有明确依据的结论，请在句末用 [来源1]、[来源2] 这类格式标注引用；如果资料不足以支持确定结论，请明确写出 [需验证]。',
   ].join('\n');
 }
 
@@ -308,7 +309,63 @@ function isSourceOnlyLine(line: string, sources: WebSearchSource[]): boolean {
   });
 }
 
-function normalizeGroundedAnswer(content: string, sources: WebSearchSource[]): string {
+function stripQuestionEcho(content: string, userMessage?: string): string {
+  const trimmed = content.trim();
+  if (!trimmed || !userMessage) {
+    return trimmed;
+  }
+
+  const normalizedQuestion = userMessage.replace(/\s+/g, '').trim();
+  if (!normalizedQuestion) {
+    return trimmed;
+  }
+
+  const lines = trimmed.split('\n').filter((line) => line.trim().length > 0);
+  if (lines.length === 0) {
+    return trimmed;
+  }
+
+  const firstLine = lines[0].trim();
+  const compactFirstLine = firstLine.replace(/\s+/g, '');
+  const normalizedQuestionPrefix = normalizedQuestion.slice(0, 18);
+
+  if (
+    compactFirstLine === normalizedQuestion
+    || compactFirstLine.startsWith(normalizedQuestion)
+    || compactFirstLine.includes(normalizedQuestionPrefix)
+  ) {
+    lines.shift();
+    return lines.join('\n').trim();
+  }
+
+  return trimmed;
+}
+
+function rewriteGroundedLead(content: string): string {
+  const lines = content
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line, index, items) => !(line.trim() === '' && items[index - 1]?.trim() === ''));
+
+  if (lines.length === 0) {
+    return '';
+  }
+
+  const firstLine = lines[0].trim();
+  if (/^《.+》的.+如下[:：]?\s*\[来源\d+\]/u.test(firstLine)) {
+    lines[0] = firstLine
+      .replace(/^《(.+)》的/u, '结合《$1》，可归纳出')
+      .replace(/如下[:：]?/u, '以下核心规则：');
+  }
+
+  return lines.join('\n').trim();
+}
+
+function normalizeGroundedAnswer(
+  content: string,
+  sources: WebSearchSource[],
+  userMessage?: string,
+): string {
   if (!content.trim() || sources.length === 0) {
     return content.trim();
   }
@@ -321,7 +378,8 @@ function normalizeGroundedAnswer(content: string, sources: WebSearchSource[]): s
     sources.map((source, index) => [source.title, `[来源${index + 1}]`]),
   );
 
-  let normalizedContent = content.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_match, title, url) => {
+  let normalizedContent = stripQuestionEcho(content, userMessage)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_match, title, url) => {
     const normalizedUrl = String(url).replace(/^https?:\/\//, '');
     return sourceLookup.get(normalizedUrl) || titleLookup.get(String(title)) || String(title);
   });
@@ -389,7 +447,10 @@ function normalizeGroundedAnswer(content: string, sources: WebSearchSource[]): s
       return `${block} ${citationTag}`;
     });
 
-  return normalizedBlocks.join('\n\n');
+  normalizedContent = normalizedBlocks.join('\n\n');
+  normalizedContent = rewriteGroundedLead(normalizedContent);
+
+  return normalizedContent;
 }
 
 function getApiBaseUrl(): string {
@@ -987,7 +1048,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
         usResponse.choices[0]?.message?.content || '',
       );
       const groundedBody = webSearchResult?.sources?.length
-        ? normalizeGroundedAnswer(mergedContent, webSearchResult.sources)
+        ? normalizeGroundedAnswer(mergedContent, webSearchResult.sources, payload.message)
         : mergedContent;
       const groundedContent = webSearchResult?.sources?.length
         ? `${groundedBody}${buildSourcesMarkdown(webSearchResult.sources)}`
@@ -1077,7 +1138,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     };
 
     const groundedBody = webSearchResult?.sources?.length
-      ? normalizeGroundedAnswer(data.choices[0]?.message?.content || '', webSearchResult.sources)
+      ? normalizeGroundedAnswer(data.choices[0]?.message?.content || '', webSearchResult.sources, payload.message)
       : (data.choices[0]?.message?.content || '');
     const groundedContent = webSearchResult?.sources?.length
       ? `${groundedBody}${buildSourcesMarkdown(webSearchResult.sources)}`
