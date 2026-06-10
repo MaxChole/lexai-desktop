@@ -3,6 +3,7 @@ export interface WebSearchSource {
   url: string;
   snippet: string;
   source: string;
+  authority: 'official' | 'reference' | 'secondary';
 }
 
 export interface WebSearchResult {
@@ -111,6 +112,42 @@ function getDomainWeight(hostname: string, jurisdiction: SearchJurisdiction): nu
   return 0;
 }
 
+function classifyAuthority(hostname: string, jurisdiction: SearchJurisdiction): 'official' | 'reference' | 'secondary' {
+  if (!hostname) return 'secondary';
+
+  if (jurisdiction === 'CN' || jurisdiction === 'CROSS') {
+    if (
+      hostname.endsWith('.gov.cn')
+      || hostname.includes('npc.gov.cn')
+      || hostname.includes('cac.gov.cn')
+      || hostname.includes('court.gov.cn')
+    ) {
+      return 'official';
+    }
+  }
+
+  if (jurisdiction === 'US' || jurisdiction === 'INT' || jurisdiction === 'CROSS') {
+    if (
+      hostname.endsWith('.gov')
+      || hostname.endsWith('.gov.uk')
+      || hostname.endsWith('.europa.eu')
+    ) {
+      return 'official';
+    }
+  }
+
+  if (
+    hostname.includes('wikipedia.org')
+    || hostname.includes('baike.baidu.com')
+    || hostname.includes('.edu')
+    || hostname.endsWith('.org')
+  ) {
+    return 'reference';
+  }
+
+  return 'secondary';
+}
+
 function scoreSource(
   source: WebSearchSource,
   queryTerms: string[],
@@ -198,16 +235,18 @@ export class FreeWebSearch {
         const title = decodeHtmlEntities((itemXml.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '').trim());
         const link = decodeHtmlEntities((itemXml.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '').trim());
         const description = decodeHtmlEntities(stripHtml((itemXml.match(/<description>([\s\S]*?)<\/description>/)?.[1] || '').trim()));
+        const hostname = getHostname(link);
         return {
           title: truncate(title),
           url: link,
           snippet: truncate(description),
           source: 'Bing RSS',
+          authority: classifyAuthority(hostname, jurisdiction),
         };
       }).filter((item) => item.title && item.url));
     }
 
-    const sources = dedupeSources(sourcePool)
+    const rankedSources = dedupeSources(sourcePool)
       .map((item) => ({
         item,
         score: scoreSource(item, queryTerms, jurisdiction, lawTitles),
@@ -225,8 +264,14 @@ export class FreeWebSearch {
         return lawTitles.some((title) => haystack.includes(title.toLowerCase()));
       })
       .sort((left, right) => right.score - left.score)
-      .slice(0, 5)
-      .map(({ item }) => item);
+      .map(({ item, score }) => ({ ...item, score }));
+
+    const authoritativeHits = rankedSources.filter((item) => item.authority === 'official');
+    const filteredSources = authoritativeHits.length >= 2
+      ? rankedSources.filter((item) => item.authority !== 'secondary')
+      : rankedSources;
+
+    const sources = filteredSources.slice(0, 5).map(({ score: _score, ...item }) => item);
 
     return {
       provider: 'bing-rss',
@@ -304,6 +349,7 @@ export class FreeWebSearch {
         url: `https://${language}.wikipedia.org/?curid=${item.pageid}`,
         snippet: truncate(stripHtml(item.snippet || '')),
         source: language === 'zh' ? '维基百科' : 'Wikipedia',
+        authority: 'reference' as const,
       }));
     }));
 
@@ -350,6 +396,7 @@ export class FreeWebSearch {
         url: item.url || '',
         snippet: truncate(stripHtml(item.content || '')),
         source: item.engine || 'SearXNG',
+        authority: classifyAuthority(getHostname(item.url || ''), jurisdiction),
       })));
 
     return {
@@ -366,10 +413,11 @@ export class FreeWebSearch {
     }
 
     const sections = sources.map((item, index) => [
-      `Source ${index + 1}`,
+      `Source ${index + 1} [来源${index + 1}]`,
       `title: ${item.title}`,
       `url: ${item.url}`,
       `origin: ${item.source}`,
+      `authority: ${item.authority}`,
       `snippet: ${item.snippet || '(no snippet)'}`,
     ].join('\n'));
 
@@ -377,7 +425,9 @@ export class FreeWebSearch {
       '# Web Search Context',
       `query: ${query}`,
       'Use these publicly retrieved references when they are relevant.',
-      'Prefer grounded statements, mention the source title when citing, and mark uncertain points with [需验证].',
+      'Prefer grounded statements, prefer official sources over secondary summaries, and mark uncertain points with [需验证].',
+      'When a statement is supported by a source, cite it inline as [来源1], [来源2], etc.',
+      'Do not present unsupported legal conclusions as certain.',
       '',
       sections.join('\n\n---\n\n'),
     ].join('\n');

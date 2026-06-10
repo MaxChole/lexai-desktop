@@ -76,6 +76,7 @@ export interface DesktopChatResponse {
     url: string;
     snippet: string;
     source: string;
+    authority: 'official' | 'reference' | 'secondary';
   }>;
   webSearch?: {
     enabled: boolean;

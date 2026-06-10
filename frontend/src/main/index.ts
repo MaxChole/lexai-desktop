@@ -251,11 +251,145 @@ function buildSourcesMarkdown(sources: WebSearchSource[]): string {
     return '';
   }
 
+  const authorityLabel: Record<WebSearchSource['authority'], string> = {
+    official: '官方来源',
+    reference: '参考资料',
+    secondary: '二级来源',
+  };
+
   const lines = sources.map((source, index) =>
-    `${index + 1}. [${source.title}](${source.url})\n   来源：${source.source}\n   摘要：${source.snippet || '无摘要'}`,
+    `[来源${index + 1}] [${source.title}](${source.url})\n类型：${authorityLabel[source.authority]} · 抓取：${source.source}\n摘要：${source.snippet || '无摘要'}`,
   );
 
   return `\n\n## 参考来源\n\n${lines.join('\n\n')}`;
+}
+
+function buildWebSearchInstruction(sources: WebSearchSource[]): string {
+  if (!sources.length) {
+    return '';
+  }
+
+  return [
+    '请优先依据已提供的公开资料回答。',
+    '对有明确依据的结论，请在句末用 [来源1]、[来源2] 这类格式标注引用。',
+    '如果资料不足以支持确定结论，请明确写出 [需验证]。',
+    '涉及法律结论时，优先引用官方来源，不要只复述二级资料。',
+  ].join('\n');
+}
+
+function buildCitationTag(sources: WebSearchSource[]): string {
+  const preferredIndexes = sources
+    .map((source, index) => ({ source, index }))
+    .filter(({ source }) => source.authority === 'official')
+    .slice(0, 2)
+    .map(({ index }) => index + 1);
+
+  const fallbackIndexes = (preferredIndexes.length > 0
+    ? preferredIndexes
+    : sources.slice(0, 2).map((_, index) => index + 1));
+
+  return fallbackIndexes.map((index) => `[来源${index}]`).join('');
+}
+
+function isSourceOnlyLine(line: string, sources: WebSearchSource[]): boolean {
+  const normalizedLine = line
+    .replace(/^[-*]\s*/, '')
+    .replace(/\[[^\]]+\]\((https?:\/\/[^\s)]+)\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalizedLine) {
+    return false;
+  }
+
+  return sources.some((source) => {
+    const normalizedTitle = source.title.replace(/\s+/g, ' ').trim();
+    return normalizedLine === normalizedTitle || normalizedLine.includes(normalizedTitle);
+  });
+}
+
+function normalizeGroundedAnswer(content: string, sources: WebSearchSource[]): string {
+  if (!content.trim() || sources.length === 0) {
+    return content.trim();
+  }
+
+  const citationTag = buildCitationTag(sources);
+  const sourceLookup = new Map(
+    sources.map((source, index) => [source.url.replace(/^https?:\/\//, ''), `[来源${index + 1}]`]),
+  );
+  const titleLookup = new Map(
+    sources.map((source, index) => [source.title, `[来源${index + 1}]`]),
+  );
+
+  let normalizedContent = content.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_match, title, url) => {
+    const normalizedUrl = String(url).replace(/^https?:\/\//, '');
+    return sourceLookup.get(normalizedUrl) || titleLookup.get(String(title)) || String(title);
+  });
+
+  normalizedContent = normalizedContent
+    .replace(/[（(]参考来源同上[）)]/g, ` ${citationTag}`)
+    .replace(/[（(]参考来源[:：]\s*/g, ' ')
+    .replace(/参考来源同上/g, citationTag);
+
+  const cleanedLines: string[] = [];
+  let skippingSourceLines = false;
+
+  for (const rawLine of normalizedContent.split('\n')) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      cleanedLines.push('');
+      skippingSourceLines = false;
+      continue;
+    }
+
+    if (/^来源[:：]\s*$/.test(trimmed)) {
+      skippingSourceLines = true;
+      continue;
+    }
+
+    if (skippingSourceLines && isSourceOnlyLine(trimmed, sources)) {
+      continue;
+    }
+
+    if (skippingSourceLines) {
+      skippingSourceLines = false;
+    }
+
+    cleanedLines.push(line);
+  }
+
+  const normalizedBlocks = cleanedLines
+    .join('\n')
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      if (/\[来源\d+\]/.test(block) || /\[需验证\]/.test(block)) {
+        return block;
+      }
+
+      if (!/[\p{Script=Han}A-Za-z]/u.test(block)) {
+        return block;
+      }
+
+      if (block.length < 18) {
+        return block;
+      }
+
+      if (/^(参考来源|来源)$/u.test(block)) {
+        return block;
+      }
+
+      if (/[。；！？”"]$/u.test(block)) {
+        return `${block} ${citationTag}`;
+      }
+
+      return `${block} ${citationTag}`;
+    });
+
+  return normalizedBlocks.join('\n\n');
 }
 
 function getApiBaseUrl(): string {
@@ -808,6 +942,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     const webSearchResult = payload.webSearchEnabled
       ? await freeWebSearch.search(payload.message, searchJurisdiction)
       : null;
+    const webSearchInstruction = buildWebSearchInstruction(webSearchResult?.sources || []);
 
     if (skillDefinition?.jurisdiction === 'CROSS' && skillDefinition.cnSkillRef && skillDefinition.usSkillRef) {
       const [cnPrompt, usPrompt] = await Promise.all([
@@ -825,6 +960,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
             messages: [
               { role: 'system', content: systemPrompt },
               ...(webSearchResult?.context ? [{ role: 'system', content: webSearchResult.context }] : []),
+              ...(webSearchInstruction ? [{ role: 'system', content: webSearchInstruction }] : []),
               { role: 'user', content: payload.message },
             ],
             max_tokens: 4096,
@@ -850,9 +986,12 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
         cnResponse.choices[0]?.message?.content || '',
         usResponse.choices[0]?.message?.content || '',
       );
-      const groundedContent = webSearchResult?.sources?.length
-        ? `${mergedContent}${buildSourcesMarkdown(webSearchResult.sources)}`
+      const groundedBody = webSearchResult?.sources?.length
+        ? normalizeGroundedAnswer(mergedContent, webSearchResult.sources)
         : mergedContent;
+      const groundedContent = webSearchResult?.sources?.length
+        ? `${groundedBody}${buildSourcesMarkdown(webSearchResult.sources)}`
+        : groundedBody;
 
       const chatResponse: ChatResponsePayload = {
         content: groundedContent,
@@ -908,6 +1047,9 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     if (webSearchResult?.context) {
       messages.push({ role: 'system', content: webSearchResult.context });
     }
+    if (webSearchInstruction) {
+      messages.push({ role: 'system', content: webSearchInstruction });
+    }
     messages.push({ role: 'user', content: payload.message });
 
     const response = await fetch(`${localStatus.baseUrl}/chat/completions`, {
@@ -934,9 +1076,12 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
-    const groundedContent = webSearchResult?.sources?.length
-      ? `${data.choices[0]?.message?.content || ''}${buildSourcesMarkdown(webSearchResult.sources)}`
+    const groundedBody = webSearchResult?.sources?.length
+      ? normalizeGroundedAnswer(data.choices[0]?.message?.content || '', webSearchResult.sources)
       : (data.choices[0]?.message?.content || '');
+    const groundedContent = webSearchResult?.sources?.length
+      ? `${groundedBody}${buildSourcesMarkdown(webSearchResult.sources)}`
+      : groundedBody;
 
     const chatResponse: ChatResponsePayload = {
       content: groundedContent,
