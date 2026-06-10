@@ -13,6 +13,7 @@ import { LocalDocumentStore } from './local-document-store.js';
 import { LocalModelManager } from './local-model-manager.js';
 import { LocalSkillEngine } from './local-skill-engine.js';
 import { SecureTokenStore } from './secure-token-store.js';
+import { FreeWebSearch, type WebSearchSource } from './free-web-search.js';
 
 function loadDesktopEnv(): void {
   const envCandidates = [
@@ -81,6 +82,7 @@ const localDocumentStore = new LocalDocumentStore(localDocumentsDir);
 const localModelManager = new LocalModelManager(localModelsDir, process.env.LOCAL_LLM_MODEL_URL);
 const localSkillEngine = new LocalSkillEngine(localProfilesDir);
 const secureTokenStore = new SecureTokenStore();
+const freeWebSearch = new FreeWebSearch(process.env.FREE_SEARCH_BASE_URL);
 const settingsStore = new Store<{ runtimeMode: 'cloud' | 'local' }>({
   defaults: {
     runtimeMode: 'cloud',
@@ -110,6 +112,7 @@ interface ChatRequestPayload {
   caseId?: string;
   sessionId?: string;
   jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS';
+  webSearchEnabled?: boolean;
 }
 
 interface ChatResponsePayload {
@@ -118,6 +121,12 @@ interface ChatResponsePayload {
   provider: string;
   conversationId?: string;
   sessionId?: string;
+  sources?: WebSearchSource[];
+  webSearch?: {
+    enabled: boolean;
+    provider?: string;
+    sourceCount: number;
+  };
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -226,6 +235,27 @@ interface NotificationRecord {
   body: string;
   read: boolean;
   createdAt: string;
+}
+
+function normalizeSearchJurisdiction(
+  jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS' | 'ALL',
+): 'CN' | 'US' | 'INT' | 'CROSS' {
+  if (!jurisdiction || jurisdiction === 'ALL') {
+    return 'CN';
+  }
+  return jurisdiction;
+}
+
+function buildSourcesMarkdown(sources: WebSearchSource[]): string {
+  if (!sources.length) {
+    return '';
+  }
+
+  const lines = sources.map((source, index) =>
+    `${index + 1}. [${source.title}](${source.url})\n   来源：${source.source}\n   摘要：${source.snippet || '无摘要'}`,
+  );
+
+  return `\n\n## 参考来源\n\n${lines.join('\n\n')}`;
 }
 
 function getApiBaseUrl(): string {
@@ -772,6 +802,12 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     const skillDefinition = payload.skillId
       ? await localSkillEngine.getSkillDefinition(payload.skillId)
       : null;
+    const searchJurisdiction = normalizeSearchJurisdiction(
+      payload.jurisdiction ?? (skillDefinition?.jurisdiction as 'CN' | 'US' | 'INT' | 'CROSS' | undefined),
+    );
+    const webSearchResult = payload.webSearchEnabled
+      ? await freeWebSearch.search(payload.message, searchJurisdiction)
+      : null;
 
     if (skillDefinition?.jurisdiction === 'CROSS' && skillDefinition.cnSkillRef && skillDefinition.usSkillRef) {
       const [cnPrompt, usPrompt] = await Promise.all([
@@ -788,6 +824,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
             model: localStatus.model,
             messages: [
               { role: 'system', content: systemPrompt },
+              ...(webSearchResult?.context ? [{ role: 'system', content: webSearchResult.context }] : []),
               { role: 'user', content: payload.message },
             ],
             max_tokens: 4096,
@@ -813,11 +850,20 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
         cnResponse.choices[0]?.message?.content || '',
         usResponse.choices[0]?.message?.content || '',
       );
+      const groundedContent = webSearchResult?.sources?.length
+        ? `${mergedContent}${buildSourcesMarkdown(webSearchResult.sources)}`
+        : mergedContent;
 
       const chatResponse: ChatResponsePayload = {
-        content: mergedContent,
+        content: groundedContent,
         model: `compare:${localStatus.model}`,
         provider: 'cross-compare',
+        sources: webSearchResult?.sources,
+        webSearch: {
+          enabled: Boolean(payload.webSearchEnabled),
+          provider: webSearchResult?.provider,
+          sourceCount: webSearchResult?.sources.length || 0,
+        },
         usage: {
           inputTokens: (cnResponse.usage?.prompt_tokens || 0) + (usResponse.usage?.prompt_tokens || 0),
           outputTokens: (cnResponse.usage?.completion_tokens || 0) + (usResponse.usage?.completion_tokens || 0),
@@ -837,7 +883,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
         assistantMessage: {
           role: 'assistant',
           content: chatResponse.content,
-          meta: `${chatResponse.provider} · ${chatResponse.model}`,
+          meta: `${chatResponse.provider} · ${chatResponse.model}${webSearchResult?.sources.length ? ` · 联网增强 ${webSearchResult.sources.length} 条来源` : ''}`,
         },
       });
 
@@ -858,6 +904,9 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
     const attachmentContext = await localDocumentStore.buildAttachmentContext(existingConversation?.attachments ?? []);
     if (attachmentContext) {
       messages.push({ role: 'system', content: attachmentContext });
+    }
+    if (webSearchResult?.context) {
+      messages.push({ role: 'system', content: webSearchResult.context });
     }
     messages.push({ role: 'user', content: payload.message });
 
@@ -885,10 +934,20 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
+    const groundedContent = webSearchResult?.sources?.length
+      ? `${data.choices[0]?.message?.content || ''}${buildSourcesMarkdown(webSearchResult.sources)}`
+      : (data.choices[0]?.message?.content || '');
+
     const chatResponse: ChatResponsePayload = {
-      content: data.choices[0]?.message?.content || '',
+      content: groundedContent,
       model: data.model || localStatus.model,
       provider: localStatus.provider === 'ollama' ? 'local-ollama' : 'local-embedded',
+      sources: webSearchResult?.sources,
+      webSearch: {
+        enabled: Boolean(payload.webSearchEnabled),
+        provider: webSearchResult?.provider,
+        sourceCount: webSearchResult?.sources.length || 0,
+      },
       usage: {
         inputTokens: data.usage?.prompt_tokens || 0,
         outputTokens: data.usage?.completion_tokens || 0,
@@ -908,7 +967,7 @@ ipcMain.handle('chat:send', async (_event, payload: ChatRequestPayload): Promise
       assistantMessage: {
         role: 'assistant',
         content: chatResponse.content,
-        meta: `${chatResponse.provider} · ${chatResponse.model}`,
+        meta: `${chatResponse.provider} · ${chatResponse.model}${webSearchResult?.sources.length ? ` · 联网增强 ${webSearchResult.sources.length} 条来源` : ''}`,
       },
     });
 

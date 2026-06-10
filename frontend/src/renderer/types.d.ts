@@ -71,6 +71,17 @@ export interface DesktopChatResponse {
   provider: string;
   conversationId?: string;
   sessionId?: string;
+  sources?: Array<{
+    title: string;
+    url: string;
+    snippet: string;
+    source: string;
+  }>;
+  webSearch?: {
+    enabled: boolean;
+    provider?: string;
+    sourceCount: number;
+  };
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -268,7 +279,15 @@ export interface LexaiBridge {
     open: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
   };
   chat: {
-    send: (message: string, skillId?: string, conversationId?: string, caseId?: string, sessionId?: string, jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS') => Promise<DesktopChatResponse>;
+    send: (
+      message: string,
+      skillId?: string,
+      conversationId?: string,
+      caseId?: string,
+      sessionId?: string,
+      jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS',
+      webSearchEnabled?: boolean,
+    ) => Promise<DesktopChatResponse>;
   };
   platform: string;
   onNotification: (callback: (data: unknown) => void) => void;

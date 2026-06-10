@@ -69,8 +69,15 @@ contextBridge.exposeInMainWorld('lexai', {
     open: (filePath: string) => ipcRenderer.invoke('local-document:open', filePath),
   },
   chat: {
-    send: (message: string, skillId?: string, conversationId?: string, caseId?: string, sessionId?: string, jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS') =>
-      ipcRenderer.invoke('chat:send', { message, skillId, conversationId, caseId, sessionId, jurisdiction }),
+    send: (
+      message: string,
+      skillId?: string,
+      conversationId?: string,
+      caseId?: string,
+      sessionId?: string,
+      jurisdiction?: 'CN' | 'US' | 'INT' | 'CROSS',
+      webSearchEnabled?: boolean,
+    ) => ipcRenderer.invoke('chat:send', { message, skillId, conversationId, caseId, sessionId, jurisdiction, webSearchEnabled }),
   },
 
   // Platform info

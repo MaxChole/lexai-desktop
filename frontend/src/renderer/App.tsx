@@ -264,6 +264,7 @@ function App() {
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [selectedTaskModeId, setSelectedTaskModeId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<AppView>('workspace');
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   const apiBase = 'http://localhost:3001/v1';
 
@@ -716,6 +717,7 @@ function App() {
         runtimeMode === 'cloud' ? selectedCaseId ?? undefined : undefined,
         runtimeMode === 'cloud' ? cloudSessionId ?? undefined : undefined,
         jurisdiction === 'ALL' ? undefined : jurisdiction,
+        runtimeMode === 'local' ? webSearchEnabled : false,
       );
       if (runtimeMode === 'local' && result.conversationId) {
         setActiveLocalConversationId(result.conversationId);
@@ -1578,7 +1580,7 @@ function App() {
           {activeView === 'workspace' && (conversation.length === 0 ? (
             <div className="py-12 text-center text-lexai-muted">
               <p className="text-lg">欢迎使用 LexAI Desktop</p>
-              <p className="mt-2 text-sm">直接描述你的任务，系统会自动选择分析模式；本地模式下也支持拖拽文件补充上下文。</p>
+              <p className="mt-2 text-sm">直接描述你的任务，系统会自动选择分析模式；本地模式下支持拖拽文件，也可开启联网增强补充公开资料。</p>
               <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-lexai-border bg-lexai-surface px-4 py-2 text-xs">
                 <span className={runtimeMode === 'local' ? 'text-emerald-300' : 'text-sky-300'}>{runtimeMode === 'local' ? '当前走本地推理链路' : '当前走云端模型链路'}</span>
                 <span className="text-lexai-muted">{runtimeMode === 'local' ? `${providerLabel} · ${localInference.model}` : 'Claude / DeepSeek / Kimi'}</span>
@@ -1647,6 +1649,19 @@ function App() {
                   {task.label}
                 </button>
               ))}
+              <button
+                onClick={() => runtimeMode === 'local' && setWebSearchEnabled((current) => !current)}
+                disabled={runtimeMode !== 'local'}
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  runtimeMode !== 'local'
+                    ? 'cursor-not-allowed border-lexai-border text-lexai-muted/50'
+                    : webSearchEnabled
+                      ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
+                      : 'border-lexai-border text-lexai-muted hover:text-lexai-text'
+                }`}
+              >
+                {webSearchEnabled ? '联网增强已开' : '联网增强'}
+              </button>
             </div>
             {usageSummary && usageSummary.usagePercent >= usageSummary.warningThreshold && (
               <div className={`mb-3 rounded-2xl border px-4 py-3 text-sm ${
@@ -1705,7 +1720,9 @@ function App() {
                 </div>
                 <div className="shrink-0">
                   {runtimeMode === 'local'
-                    ? '本地模式支持拖拽上传'
+                    ? webSearchEnabled
+                      ? '本地模式已启用联网增强'
+                      : '本地模式支持拖拽上传'
                     : selectedCaseId
                       ? '云端模式可上传文档到当前案件'
                       : '先选择或创建案件，再将云端会话与文档绑定'}
